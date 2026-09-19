@@ -1,0 +1,6 @@
+{
+  "name": "SOCPulse",
+  "description": "Enterprise SOC Threat Operations suite. Features AI Natural Language SIEM Copilot, 11-SIEM Query Generator & Optimizer, Open-Source Malware Sandbox Intel & Detonation, Email Header Forensics, IOC Masker, and Threat Intel Reputation Matrix.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
