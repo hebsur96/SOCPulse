@@ -1,5 +1,5 @@
-import { DetectionBreakdown, SiemPlatformId } from '../types';
-import { SIEM_PLATFORMS } from './siemPlatforms';
+import type { DetectionBreakdown, SiemPlatformId } from '../types.js';
+import { SIEM_PLATFORMS } from './siemPlatforms.js';
 
 export interface ThreatScenarioTemplate {
   id: string;
