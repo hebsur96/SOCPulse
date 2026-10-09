@@ -539,10 +539,21 @@ app.post('/api/copilot/chat', handleCopilotChat);
 app.post('/api/natural-language-query', handleCopilotChat);
 
 // Helper for IOC Defanging & Masking
-function maskTextIocs(text: string, maskMode: 'defang' | 'redact' | 'hash_mask') {
+interface MaskOptions {
+  hashWrapPound?: boolean;
+  hashWrapStyle?: 'full' | 'defanged' | 'token';
+}
+
+function maskTextIocs(
+  text: string,
+  maskMode: 'defang' | 'redact' | 'hash_mask',
+  options: MaskOptions = { hashWrapPound: true, hashWrapStyle: 'full' }
+) {
   let processed = text;
   const foundMap = new Map<string, { type: 'ip' | 'url' | 'domain' | 'email' | 'hash'; original: string; masked: string; count: number }>();
   const counts = { ip: 0, url: 0, domain: 0, email: 0, hash: 0, total: 0 };
+  const wrapPound = options.hashWrapPound !== false;
+  const hashStyle = options.hashWrapStyle || 'full';
 
   // 1. URLs
   const urlRegex = /\bhttps?:\/\/[^\s<>"'{}|\\^`]+[^\s<>"'{}|\\^`.,;:?]/gi;
@@ -621,16 +632,26 @@ function maskTextIocs(text: string, maskMode: 'defang' | 'redact' | 'hash_mask')
     return masked;
   });
 
-  // 5. SHA256 Hashes
-  const sha256Regex = /\b[a-fA-F0-9]{64}\b/g;
-  processed = processed.replace(sha256Regex, (match) => {
+  // 5. SHA512 Hashes (128 hex chars)
+  const sha512Regex = /(?<!#)\b[a-fA-F0-9]{128}\b(?!#)/g;
+  processed = processed.replace(sha512Regex, (match) => {
     let masked = match;
-    if (maskMode === 'defang') {
-      masked = `${match.slice(0, 8)}[...SHA256-DEFANGED...]${match.slice(-8)}`;
-    } else if (maskMode === 'redact') {
-      masked = '[MASKED-SHA256]';
-    } else if (maskMode === 'hash_mask') {
-      masked = `[HASH-SHA256]`;
+    if (wrapPound) {
+      if (hashStyle === 'defanged') {
+        masked = `#${match.slice(0, 8)}[...SHA512-DEFANGED...]${match.slice(-8)}#`;
+      } else if (hashStyle === 'token' || maskMode === 'redact' || maskMode === 'hash_mask') {
+        masked = `#[MASKED-SHA512]#`;
+      } else {
+        masked = `#${match}#`;
+      }
+    } else {
+      if (maskMode === 'defang') {
+        masked = `${match.slice(0, 8)}[...SHA512-DEFANGED...]${match.slice(-8)}`;
+      } else if (maskMode === 'redact') {
+        masked = '[MASKED-SHA512]';
+      } else if (maskMode === 'hash_mask') {
+        masked = `[HASH-SHA512]`;
+      }
     }
     if (!foundMap.has(match)) {
       foundMap.set(match, { type: 'hash', original: match, masked, count: 1 });
@@ -640,17 +661,58 @@ function maskTextIocs(text: string, maskMode: 'defang' | 'redact' | 'hash_mask')
     return masked;
   });
 
-  // 6. MD5 / SHA1 Hashes
-  const md5sha1Regex = /\b[a-fA-F0-9]{32,40}\b/g;
-  processed = processed.replace(md5sha1Regex, (match) => {
-    if (match.includes('DEFANGED') || match.includes('MASKED')) return match;
+  // 6. SHA256 Hashes (64 hex chars)
+  const sha256Regex = /(?<!#)\b[a-fA-F0-9]{64}\b(?!#)/g;
+  processed = processed.replace(sha256Regex, (match) => {
     let masked = match;
-    if (maskMode === 'defang') {
-      masked = `${match.slice(0, 6)}[...HASH-DEFANGED...]${match.slice(-6)}`;
-    } else if (maskMode === 'redact') {
-      masked = '[MASKED-HASH]';
-    } else if (maskMode === 'hash_mask') {
-      masked = `[HASH-MASK]`;
+    if (wrapPound) {
+      if (hashStyle === 'defanged') {
+        masked = `#${match.slice(0, 8)}[...SHA256-DEFANGED...]${match.slice(-8)}#`;
+      } else if (hashStyle === 'token' || maskMode === 'redact' || maskMode === 'hash_mask') {
+        masked = `#[MASKED-SHA256]#`;
+      } else {
+        // Enclose full hash with # at start & end
+        masked = `#${match}#`;
+      }
+    } else {
+      if (maskMode === 'defang') {
+        masked = `${match.slice(0, 8)}[...SHA256-DEFANGED...]${match.slice(-8)}`;
+      } else if (maskMode === 'redact') {
+        masked = '[MASKED-SHA256]';
+      } else if (maskMode === 'hash_mask') {
+        masked = `[HASH-SHA256]`;
+      }
+    }
+    if (!foundMap.has(match)) {
+      foundMap.set(match, { type: 'hash', original: match, masked, count: 1 });
+    } else {
+      foundMap.get(match)!.count++;
+    }
+    return masked;
+  });
+
+  // 7. MD5 (32 hex chars) and SHA1 (40 hex chars) Hashes
+  const md5sha1Regex = /(?<!#)\b[a-fA-F0-9]{32,40}\b(?!#)/g;
+  processed = processed.replace(md5sha1Regex, (match) => {
+    if (match.includes('DEFANGED') || match.includes('MASKED') || match.includes('#')) return match;
+    let masked = match;
+    if (wrapPound) {
+      if (hashStyle === 'defanged') {
+        masked = `#${match.slice(0, 6)}[...HASH-DEFANGED...]${match.slice(-6)}#`;
+      } else if (hashStyle === 'token' || maskMode === 'redact' || maskMode === 'hash_mask') {
+        masked = `#[MASKED-HASH]#`;
+      } else {
+        // Enclose full hash with # at start & end
+        masked = `#${match}#`;
+      }
+    } else {
+      if (maskMode === 'defang') {
+        masked = `${match.slice(0, 6)}[...HASH-DEFANGED...]${match.slice(-6)}`;
+      } else if (maskMode === 'redact') {
+        masked = '[MASKED-HASH]';
+      } else if (maskMode === 'hash_mask') {
+        masked = `[HASH-MASK]`;
+      }
     }
     if (!foundMap.has(match)) {
       foundMap.set(match, { type: 'hash', original: match, masked, count: 1 });
@@ -680,6 +742,8 @@ app.post('/api/mask-iocs', async (req, res) => {
       fileName = 'input.txt',
       fileDataUri,
       imageDataUri,
+      hashWrapPound = true,
+      hashWrapStyle = 'full',
     } = req.body;
 
     let contentToProcess = (inputText !== undefined ? inputText : rawContent) || '';
@@ -710,7 +774,11 @@ app.post('/api/mask-iocs', async (req, res) => {
       }
     }
 
-    const result = maskTextIocs(contentToProcess, maskMode as any);
+    const shouldWrapPound = hashWrapPound !== false;
+    const result = maskTextIocs(contentToProcess, maskMode as any, {
+      hashWrapPound: shouldWrapPound,
+      hashWrapStyle: hashWrapStyle || 'full',
+    });
 
     res.json({
       maskedContent: result.maskedContent,
@@ -718,6 +786,8 @@ app.post('/api/mask-iocs', async (req, res) => {
       counts: result.counts,
       fileType,
       fileName,
+      hashWrapPound: shouldWrapPound,
+      hashWrapStyle: hashWrapStyle || 'full',
     });
   } catch (err) {
     console.error('IOC Masker error:', err);

@@ -147,6 +147,7 @@ export interface CopilotChatMessage {
 
 export type IocMaskMode = 'defang' | 'redact' | 'hash_mask';
 export type IocFileType = 'text' | 'csv' | 'excel' | 'xlsx' | 'txt' | 'image';
+export type HashWrapStyle = 'full' | 'defanged' | 'token';
 
 export interface ExtractedIoc {
   type: 'ip' | 'url' | 'domain' | 'email' | 'hash';
@@ -170,6 +171,8 @@ export interface IocMaskResult {
   fileName?: string;
   rawCsvRows?: string[][];
   maskedCsvRows?: string[][];
+  hashWrapPound?: boolean;
+  hashWrapStyle?: HashWrapStyle;
 }
 
 export type IocType = 'ip' | 'domain' | 'url' | 'hash_md5' | 'hash_sha256' | 'hash_sha1' | 'cve' | 'email' | 'auto';
