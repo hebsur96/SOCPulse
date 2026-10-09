@@ -168,7 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'translator',
-          label: 'Multi-SIEM Translator',
+          label: 'SIEM Query Translator Studio',
           icon: RefreshCw,
         },
         {

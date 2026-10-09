@@ -280,8 +280,73 @@ app.post('/api/translate-query', async (req, res) => {
     const sourceMeta = SIEM_PLATFORMS[sourcePlatform] || SIEM_PLATFORMS.sentinel;
     const targetMeta = SIEM_PLATFORMS[targetPlatform] || SIEM_PLATFORMS.splunk;
 
-    const promptText = `You are a Principal SIEM Engineer and Query Translator.
-Translate this ${sourceMeta.name} (${sourceMeta.language}) query into a production-ready ${targetMeta.name} (${targetMeta.language}) query.
+    // Tailor instructions based on whether source or target is Sigma / YARA
+    let promptText = '';
+    let systemInstruction = '';
+
+    if (targetPlatform === 'sigma') {
+      promptText = `You are a Principal SOC Detection Engineer specializing in Sigma rules.
+Convert this ${sourceMeta.name} (${sourceMeta.language}) query into a valid, production-grade Sigma rule in YAML format (Sigma Specification v1.1):
+
+SOURCE QUERY (${sourceMeta.name}):
+${sourceQuery}
+
+Requirements:
+- Output ONLY the raw valid YAML Sigma rule without markdown formatting or conversational chatter.
+- Must include: title, id (UUIDv4), status (test), description, references, author, date, tags (with MITRE ATT&CK e.g. attack.t1059, attack.execution), logsource (category, product, service), detection (selection dictionary with modifiers like contains, endswith, startswith, condition: selection), falsepositives, level (low/medium/high/critical).
+- Maintain precise field semantics from the source query.`;
+      systemInstruction = 'You are an expert detection engineer. Output only the raw YAML Sigma rule without markdown fences.';
+    } else if (targetPlatform === 'yara') {
+      promptText = `You are a Principal Threat Intelligence and Malware Reverse Engineer specializing in YARA.
+Convert this ${sourceMeta.name} (${sourceMeta.language}) query and its indicators into an authentic, production-grade YARA 4.x rule:
+
+SOURCE QUERY (${sourceMeta.name}):
+${sourceQuery}
+
+Requirements:
+- Output ONLY the raw valid YARA rule without markdown formatting or conversational chatter.
+- Must include:
+  rule <Valid_Rule_Name> {
+    meta:
+      description = "..."
+      author = "SOC Threat Intel"
+      date = "2026-10-09"
+      severity = "HIGH"
+      mitre_technique = "..."
+    strings:
+      $s1 = "..." ascii wide nocase
+      // Include any relevant keywords, filenames, command flags, or hex signatures
+    condition:
+      uint16(0) == 0x5A4D and any of ($s*) // or appropriate file/artifact condition
+  }
+- Ensure correct YARA 4.x syntax with no syntax errors.`;
+      systemInstruction = 'You are a YARA rule engineer. Output only the raw executable YARA rule without markdown fences.';
+    } else if (sourcePlatform === 'sigma') {
+      promptText = `You are a Principal SIEM Engineer and pySigma compiler specialist.
+Compile this generic Sigma YAML detection rule into a native, production-ready ${targetMeta.name} (${targetMeta.language}) query:
+
+SIGMA YAML RULE:
+${sourceQuery}
+
+Requirements:
+- Extract the logsource, detection selections, field modifiers (contains, startswith, endswith), and condition logic.
+- Map fields accurately to ${targetMeta.name} schemas (e.g. CommandLine, process.command_line, process_name, etc.).
+- Output ONLY the raw executable ${targetMeta.language} query without markdown conversational chatter or code fences.`;
+      systemInstruction = `You are an expert SIEM query compiler. Output only the executable query in ${targetMeta.language}.`;
+    } else if (sourcePlatform === 'yara') {
+      promptText = `You are a Principal Threat Hunter.
+Convert the string patterns, artifact indicators, and signatures from this YARA rule into a targeted ${targetMeta.name} (${targetMeta.language}) threat hunting query:
+
+YARA RULE:
+${sourceQuery}
+
+Requirements:
+- Extract string patterns ($s1, $s2, etc.) and construct an optimized threat hunt query in ${targetMeta.name} searching endpoint process executions, file creation events, or network payloads.
+- Output ONLY the raw executable ${targetMeta.language} query without markdown conversational chatter.`;
+      systemInstruction = `You are a threat hunting engineer. Output only the executable query in ${targetMeta.language}.`;
+    } else {
+      promptText = `You are a Principal SIEM Engineer and Query Translator.
+Translate this ${sourceMeta.name} (${sourceMeta.language}) query into a production-ready ${targetMeta.name} (${targetMeta.language}) query:
 
 SOURCE QUERY (${sourceMeta.name}):
 ${sourceQuery}
@@ -289,12 +354,10 @@ ${sourceQuery}
 Requirements:
 - Output ONLY the raw executable ${targetMeta.language} query without markdown conversational chatter.
 - Map field names, functions, aggregations, and event tables accurately for ${targetMeta.name}.`;
+      systemInstruction = `You are an expert SIEM query translator. Output only the executable query in ${targetMeta.language}.`;
+    }
 
-    const rawResponse = await callGeminiMultiModel(
-      promptText,
-      `You are an expert SIEM query translator. Output only the executable query in ${targetMeta.language}.`,
-      false
-    );
+    const rawResponse = await callGeminiMultiModel(promptText, systemInstruction, false);
 
     if (rawResponse && rawResponse.trim()) {
       let cleanQuery = rawResponse.trim();
@@ -306,18 +369,68 @@ Requirements:
         targetPlatform,
         sourceQuery,
         translatedQuery: cleanQuery,
+        format: targetPlatform === 'sigma' ? 'sigma_yaml' : targetPlatform === 'yara' ? 'yara_rule' : 'siem_query',
       });
     }
 
-    // Fallback translation
-    const fallbackObj = buildUniversalDetection(sourceQuery, targetPlatform as any);
-    const fallbackTranslated = fallbackObj.translatedQueries[targetPlatform as keyof typeof fallbackObj.translatedQueries] || fallbackObj.query;
+    // Deterministic fallback translation for Sigma, YARA, or SIEM
+    const cleanTerms = sourceQuery
+      .split(/[\s"|(),:=]+/)
+      .map((w: string) => w.replace(/[^a-zA-Z0-9_.-]/g, ''))
+      .filter((w: string) => w.length > 2 && !['where', 'index', 'select', 'from', 'table', 'and', 'not', 'contains', 'has', 'rule', 'meta', 'strings', 'condition'].includes(w.toLowerCase()))
+      .slice(0, 5);
+
+    const mainToken = cleanTerms[0] || 'threat_activity';
+
+    let fallbackTranslated = '';
+    if (targetPlatform === 'sigma') {
+      fallbackTranslated = `title: Converted Detection Rule - ${mainToken}
+id: 6a82d1c9-${Math.random().toString(36).substring(2, 6)}-41d0-9ab4-1a2b3c4d5e6f
+status: test
+description: Generic Sigma detection rule translated from ${sourceMeta.name} hunting query.
+references:
+    - https://attack.mitre.org/techniques/T1059/
+author: SOC Detection Engineering
+date: 2026/10/09
+tags:
+    - attack.execution
+    - attack.t1059
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        CommandLine|contains:
+${cleanTerms.length > 0 ? cleanTerms.map((t: string) => `            - '${t}'`).join('\n') : `            - 'powershell'`}
+    condition: selection
+falsepositives:
+    - Legitimate administrative tooling
+    - IT infrastructure maintenance
+level: high`;
+    } else if (targetPlatform === 'yara') {
+      fallbackTranslated = `rule Detect_${mainToken.replace(/[^a-zA-Z0-9]/g, '_')}_Artifact {
+    meta:
+        description = "YARA signature rule translated from ${sourceMeta.name} indicator query"
+        author = "SOC Threat Intel & Signature Team"
+        date = "2026-10-09"
+        severity = "HIGH"
+        source_dialect = "${sourcePlatform}"
+    strings:
+${cleanTerms.length > 0 ? cleanTerms.map((t: string, idx: number) => `        $s${idx + 1} = "${t}" ascii wide nocase`).join('\n') : `        $s1 = "suspicious_payload" ascii wide nocase`}
+    condition:
+        uint16(0) == 0x5A4D and any of ($s*)
+}`;
+    } else {
+      const fallbackObj = buildUniversalDetection(cleanTerms.join(' ') || sourceQuery, targetPlatform as any);
+      fallbackTranslated = fallbackObj.translatedQueries[targetPlatform as keyof typeof fallbackObj.translatedQueries] || fallbackObj.query;
+    }
 
     res.json({
       sourcePlatform,
       targetPlatform,
       sourceQuery,
       translatedQuery: fallbackTranslated,
+      format: targetPlatform === 'sigma' ? 'sigma_yaml' : targetPlatform === 'yara' ? 'yara_rule' : 'siem_query',
     });
   } catch (error) {
     console.error('Translation error:', error);

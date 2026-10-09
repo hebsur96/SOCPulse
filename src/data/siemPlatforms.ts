@@ -111,7 +111,26 @@ export const SIEM_PLATFORMS: Record<SiemPlatformId, SiemPlatformMeta> = {
     description: 'Behavioral analytics & risk engine queries over cloud, user identity, and endpoint telemetry.',
     defaultTable: 'gurucul_telemetry',
   },
+  sigma: {
+    id: 'sigma',
+    name: 'Sigma Rule Standard',
+    language: 'YAML (Generic SIEM Rule)',
+    category: 'Rule & Signature Standard',
+    icon: 'FileCode',
+    badgeColor: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+    description: 'Open-standard, vendor-agnostic signature format for SIEM & log detection rules with logsource, detection selections, and tags.',
+    defaultTable: 'logsource: category: process_creation',
+  },
+  yara: {
+    id: 'yara',
+    name: 'YARA Rule Standard',
+    language: 'YARA (Pattern & Artifact Matching)',
+    category: 'Rule & Signature Standard',
+    icon: 'Binary',
+    badgeColor: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
+    description: 'De-facto rule standard for malware identification, binary string signatures, memory artifacts, and IOC byte patterns.',
+    defaultTable: 'rule Malware_Detection { strings: ... condition: ... }',
+  },
 };
-
 
 export const SIEM_PLATFORM_LIST = Object.values(SIEM_PLATFORMS);

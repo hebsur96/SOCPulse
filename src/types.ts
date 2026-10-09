@@ -33,13 +33,15 @@ export type SiemPlatformId =
   | 'securonix'
   | 'logrhythm'
   | 'arcsight'
-  | 'gurucul';
+  | 'gurucul'
+  | 'sigma'
+  | 'yara';
 
 export interface SiemPlatformMeta {
   id: SiemPlatformId;
   name: string;
   language: string;
-  category: 'Cloud SIEM' | 'EDR / XDR' | 'Enterprise SIEM' | 'Legacy / Specialized';
+  category: 'Cloud SIEM' | 'EDR / XDR' | 'Enterprise SIEM' | 'Legacy / Specialized' | 'Rule & Signature Standard';
   icon: string;
   badgeColor: string;
   description: string;

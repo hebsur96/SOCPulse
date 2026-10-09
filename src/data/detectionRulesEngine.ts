@@ -17,10 +17,10 @@ export interface ThreatScenarioTemplate {
   whitelisting: string[];
   thresholding: string;
   assumptions: string[];
-  queries: Record<SiemPlatformId, string>;
+  queries: Partial<Record<SiemPlatformId, string>> & Record<string, string>;
   investigationQueries: Array<{
     title: string;
-    queryTemplates: Record<SiemPlatformId, string>;
+    queryTemplates: Partial<Record<SiemPlatformId, string>> & Record<string, string>;
     purpose: string;
   }>;
 }
@@ -172,6 +172,50 @@ category = "Authentication" AND status = "FAILURE" AND application = "SSH"
 | SEQUENCE_FOLLOWED_BY (category = "Authentication" AND status = "SUCCESS" AND application = "SSH")
 | WITHIN 10m BY source_ip
 | RISK_SCORE = 85`,
+      sigma: `title: Successful SSH Login After Brute Force Attacks
+id: 5a73e6d2-2821-4f30-8d49-16f5c6b9bb74
+status: test
+description: Detects multiple failed authentication attempts (sshd/Syslog) followed by a successful login from the same IP within a 10-minute window.
+references:
+    - https://attack.mitre.org/techniques/T1110/001/
+author: SOC Detection Team
+date: 2026/10/09
+tags:
+    - attack.credential_access
+    - attack.t1110.001
+logsource:
+    category: authentication
+    product: linux
+    service: sshd
+detection:
+    selection_fail:
+        event.category: authentication
+        event.outcome: failure
+        process.name: sshd
+    selection_success:
+        event.category: authentication
+        event.outcome: success
+        process.name: sshd
+    timeframe: 10m
+    condition: selection_fail | count() by source.ip >= 5 followed by selection_success by source.ip
+falsepositives:
+    - DevOps automated scripts with expired keys
+level: high`,
+      yara: `rule Linux_SSH_BruteForce_Artifact {
+    meta:
+        description = "Detects Linux SSH brute force helper scripts or credential dumping tools"
+        author = "SOC Threat Intel"
+        date = "2026-10-09"
+        severity = "HIGH"
+        mitre_technique = "T1110.001"
+    strings:
+        $s1 = "Failed password for" ascii
+        $s2 = "sshd: Failed authentication" ascii
+        $s3 = "/var/log/auth.log" ascii
+        $s4 = "sshpass -p" ascii
+    condition:
+        2 of ($s*)
+}`,
     },
     investigationQueries: [
       {
@@ -284,6 +328,53 @@ category = "Endpoint Analytics" AND (
   process_name = "mimikatz.exe"
 )
 | RISK_SCORE = 95`,
+      sigma: `title: LSASS Memory Dumping via LOLBins or Direct Handle
+id: e4b60e54-e65a-4b9b-9c32-1563f6e1f02a
+status: test
+description: Detects processes accessing lsass.exe memory handles or executing comsvcs.dll/procdump to dump credentials.
+references:
+    - https://attack.mitre.org/techniques/T1003/001/
+author: SOC Detection Team
+date: 2026/10/09
+tags:
+    - attack.credential_access
+    - attack.t1003.001
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_tools:
+        Image|endswith:
+            - '\procdump.exe'
+            - '\procdump64.exe'
+            - '\dumpert.exe'
+            - '\nanodump.exe'
+        CommandLine|contains:
+            - 'lsass'
+    selection_comsvcs:
+        CommandLine|contains|all:
+            - 'comsvcs.dll'
+            - 'MiniDump'
+    condition: selection_tools or selection_comsvcs
+falsepositives:
+    - Legitimate AV/EDR engine diagnostics
+level: critical`,
+      yara: `rule LSASS_Memory_Dump_LOLBin_String {
+    meta:
+        description = "Detects MiniDump and ProcDump parameters targeting lsass.exe memory"
+        author = "SOC Threat Intel"
+        date = "2026-10-09"
+        severity = "CRITICAL"
+        mitre_technique = "T1003.001"
+    strings:
+        $cmd1 = "MiniDump" nocase ascii wide
+        $cmd2 = "comsvcs.dll" nocase ascii wide
+        $cmd3 = "lsass.exe" nocase ascii wide
+        $tool1 = "procdump" nocase ascii wide
+        $tool2 = "sekurlsa" nocase ascii wide
+    condition:
+        ($cmd1 and $cmd2 and $cmd3) or ($tool1 and $cmd3) or $tool2
+}`,
     },
     investigationQueries: [
       {
@@ -387,6 +478,55 @@ category = "Endpoint Analytics" AND process_name IN ("powershell.exe", "pwsh.exe
   command_line LIKE "%-enc%" OR command_line LIKE "%downloadstring%"
 )
 | RISK_SCORE = 85`,
+      sigma: `title: Suspicious Encoded PowerShell Download Cradle
+id: 3b1a8d42-5f33-4e89-a2e1-8849b2f6c91a
+status: test
+description: Detects encoded PowerShell commands initiating remote download cradles or hidden execution.
+references:
+    - https://attack.mitre.org/techniques/T1059/001/
+author: SOC Detection Team
+date: 2026/10/09
+tags:
+    - attack.execution
+    - attack.t1059.001
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_img:
+        Image|endswith:
+            - '\powershell.exe'
+            - '\pwsh.exe'
+    selection_flags:
+        CommandLine|contains:
+            - ' -enc '
+            - ' -encodedcommand '
+            - 'DownloadString'
+            - 'Net.WebClient'
+            - 'Invoke-WebRequest'
+            - 'IEX'
+    condition: selection_img and selection_flags
+falsepositives:
+    - Verified IT management software deployments
+level: high`,
+      yara: `rule Suspicious_PowerShell_DownloadCradle {
+    meta:
+        description = "Detects obfuscated or encoded PowerShell download cradle patterns"
+        author = "SOC Threat Intel"
+        date = "2026-10-09"
+        severity = "HIGH"
+        mitre_technique = "T1059.001"
+    strings:
+        $ps1 = "powershell.exe" nocase ascii wide
+        $flag1 = "-EncodedCommand" nocase ascii wide
+        $flag2 = "-enc " nocase ascii wide
+        $method1 = "DownloadString" nocase ascii wide
+        $method2 = "Net.WebClient" nocase ascii wide
+        $method3 = "Invoke-Expression" nocase ascii wide
+        $method4 = "IEX(" nocase ascii wide
+    condition:
+        ($ps1 and (1 of ($flag*))) or (2 of ($method*))
+}`,
     },
     investigationQueries: [
       {
@@ -489,6 +629,47 @@ deviceEventClassId = "4769" AND message CONTAINS "0x17" AND NOT destinationUserN
       gurucul: `// Gurucul Next-Gen SIEM
 category = "Authentication" AND event_id = 4769 AND encryption_type = "0x17" AND service_name NOT LIKE "%$%"
 | GROUPBY user_name, source_ip | HAVING COUNT >= 3 | RISK_SCORE = 90`,
+      sigma: `title: Potential Kerberoasting Ticket Request (RC4 SPN)
+id: 9c2a41d8-3482-4df7-8769-d4193b2a0914
+status: test
+description: Detects abnormal volume of Kerberos Service Ticket requests requesting weak RC4 encryption (TicketEncryptionType 0x17).
+references:
+    - https://attack.mitre.org/techniques/T1558/003/
+author: SOC Detection Team
+date: 2026/10/09
+tags:
+    - attack.credential_access
+    - attack.t1558.003
+logsource:
+    category: kerberos
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 4769
+        TicketEncryptionType: '0x17'
+    filter_machine:
+        ServiceName|endswith: '$'
+    condition: selection and not filter_machine | count() by TargetUserName >= 5
+falsepositives:
+    - Legacy service accounts requiring RC4 HMAC encryption
+level: high`,
+      yara: `rule Kerberoasting_Tool_Signatures {
+    meta:
+        description = "Identifies Kerberoasting artifact strings and tool patterns (Rubeus, Invoke-Kerberoast)"
+        author = "SOC Threat Intel"
+        date = "2026-10-09"
+        severity = "HIGH"
+        mitre_technique = "T1558.003"
+    strings:
+        $rub1 = "Rubeus kerberoast" nocase ascii wide
+        $rub2 = "Invoke-Kerberoast" nocase ascii wide
+        $spn1 = "servicePrincipalName" nocase ascii wide
+        $enc1 = "0x17" ascii
+        $hash1 = "$krb5tgs$23$" ascii
+    condition:
+        any of ($rub*) or ($spn1 and ($enc1 or $hash1))
+}`,
     },
     investigationQueries: [
       {
@@ -591,6 +772,56 @@ category = "Endpoint Analytics" AND (
   command_line LIKE "%delete shadows%" OR command_line LIKE "%shadowcopy delete%"
 )
 | RISK_SCORE = 100`,
+      sigma: `title: Volume Shadow Copy Deletion via LOLBins
+id: a23d41f7-4952-47e2-8921-5f210d3e5210
+status: test
+description: Detects execution of vssadmin, wmic, or bcdedit to delete shadow copies or disable Windows recovery.
+references:
+    - https://attack.mitre.org/techniques/T1490/
+author: SOC Detection Team
+date: 2026/10/09
+tags:
+    - attack.impact
+    - attack.t1490
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_vssadmin:
+        CommandLine|contains|all:
+            - 'vssadmin'
+            - 'delete'
+            - 'shadows'
+    selection_wmic:
+        CommandLine|contains|all:
+            - 'wmic'
+            - 'shadowcopy'
+            - 'delete'
+    selection_bcdedit:
+        CommandLine|contains|all:
+            - 'bcdedit'
+            - 'recoveryenabled'
+            - 'No'
+    condition: selection_vssadmin or selection_wmic or selection_bcdedit
+falsepositives:
+    - Rare enterprise backup software routine (e.g. Veritas, Veeam)
+level: critical`,
+      yara: `rule Ransomware_ShadowCopy_Deletion_Commands {
+    meta:
+        description = "Identifies commands attempting to delete volume shadow copies and disable recovery"
+        author = "SOC Threat Intel"
+        date = "2026-10-09"
+        severity = "CRITICAL"
+        mitre_technique = "T1490"
+    strings:
+        $vss = "vssadmin.exe delete shadows /all /quiet" nocase ascii wide
+        $wmic = "wmic shadowcopy delete" nocase ascii wide
+        $bcd1 = "bcdedit /set {default} bootstatuspolicy ignoreallfailures" nocase ascii wide
+        $bcd2 = "bcdedit /set {default} recoveryenabled no" nocase ascii wide
+        $wbadmin = "wbadmin delete catalog -quiet" nocase ascii wide
+    condition:
+        any of them
+}`,
     },
     investigationQueries: [
       {
@@ -689,6 +920,53 @@ deviceEventClassId = "AWS-IAM-POLICY" AND (commandLine CONTAINS "AttachUserPolic
       gurucul: `// Gurucul Next-Gen SIEM
 category = "Cloud Audit" AND cloud_provider = "AWS" AND event_name IN ("AttachUserPolicy", "CreateAccessKey")
 | RISK_SCORE = 90`,
+      sigma: `title: AWS CloudTrail IAM Privilege Escalation or Root Usage
+id: d1789c42-789a-4e2a-9812-d3521e4210a4
+status: test
+description: Detects AWS IAM policy tampering, administrator access attachment, or root account console logins.
+references:
+    - https://attack.mitre.org/techniques/T1098/
+author: SOC Detection Team
+date: 2026/10/09
+tags:
+    - attack.persistence
+    - attack.privilege_escalation
+    - attack.t1098
+logsource:
+    category: cloud
+    product: aws
+    service: cloudtrail
+detection:
+    selection_events:
+        eventName:
+            - 'AttachUserPolicy'
+            - 'AttachRolePolicy'
+            - 'CreatePolicyVersion'
+            - 'PutUserPolicy'
+        requestParameters.policyArn:
+            - 'arn:aws:iam::aws:policy/AdministratorAccess'
+    selection_root:
+        userIdentity.type: 'Root'
+        eventName: 'ConsoleLogin'
+    condition: selection_events or selection_root
+falsepositives:
+    - Scheduled Terraform or CloudFormation IAM updates
+level: high`,
+      yara: `rule AWS_Credential_Exfiltration_Patterns {
+    meta:
+        description = "Detects AWS credentials and token exfiltration or IAM backdoor patterns"
+        author = "SOC Threat Intel"
+        date = "2026-10-09"
+        severity = "HIGH"
+        mitre_technique = "T1098"
+    strings:
+        $id1 = "AKIA[0-9A-Z]{16}" ascii
+        $id2 = "aws_access_key_id" nocase ascii wide
+        $sec1 = "aws_secret_access_key" nocase ascii wide
+        $admin = "arn:aws:iam::aws:policy/AdministratorAccess" ascii wide
+    condition:
+        ($id2 and $sec1) or $admin
+}`,
     },
     investigationQueries: [
       {
@@ -847,6 +1125,42 @@ deviceEventClassId = "4688" AND (${cleanTerms.map((t) => `commandLine CONTAINS "
     gurucul: `// Gurucul Next-Gen SIEM
 category = "Endpoint Analytics" AND (${cleanTerms.map((t) => `command_line LIKE "%${t}%"`).join(' OR ')})
 | RISK_SCORE = 75`,
+    sigma: `title: Detect ${userPrompt.replace(/["\n]/g, ' ')}
+id: 7f8a1c9e-${Math.random().toString(36).substring(2, 6)}-4a2b-98f1-53e7d9b01234
+status: test
+description: Detects adversarial activity and suspicious patterns related to ${userPrompt.replace(/["\n]/g, ' ')}.
+references:
+    - https://attack.mitre.org/techniques/T1059/
+author: SOC Detection Engineering
+date: 2026/10/09
+tags:
+    - attack.execution
+    - attack.t1059
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        CommandLine|contains:
+${cleanTerms.length > 0 ? cleanTerms.map((t) => `            - '${t}'`).join('\n') : `            - 'powershell'`}
+    condition: selection
+falsepositives:
+    - Legitimate administrative scripts
+    - Verified enterprise automation
+level: ${severity === 'critical' ? 'critical' : severity === 'high' ? 'high' : 'medium'}`,
+    yara: `rule Detect_${mainToken.replace(/[^a-zA-Z0-9]/g, '_')}_Artifact {
+    meta:
+        description = "Identifies artifacts and execution patterns related to: ${userPrompt.replace(/["\n]/g, ' ')}"
+        author = "SOC Threat Intel & Signature Team"
+        date = "2026-10-09"
+        severity = "${severity.toUpperCase()}"
+        threat_score = 85
+        mitre_technique = "T1059"
+    strings:
+${cleanTerms.length > 0 ? cleanTerms.map((t, idx) => `        $s${idx + 1} = "${t}" ascii wide nocase`).join('\n') : `        $s1 = "powershell" ascii wide nocase`}
+    condition:
+        uint16(0) == 0x5A4D and any of ($s*)
+}`,
   };
 
   const platformMeta = SIEM_PLATFORMS[targetPlatform] || SIEM_PLATFORMS.sentinel;
