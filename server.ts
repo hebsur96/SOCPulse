@@ -503,7 +503,7 @@ Return JSON in this exact format:
   }
 });
 
-// 4. Natural Language SOC Query Assistant & Google Threat Research Copilot Endpoint
+// 4. Ask SOCPulse Generative AI Chatbot Endpoint (Normal AI Chatbot for any question)
 const handleCopilotChat = async (req: express.Request, res: express.Response) => {
   try {
     const rawInput = req.body.message || req.body.prompt || req.body.query || '';
@@ -516,135 +516,152 @@ const handleCopilotChat = async (req: express.Request, res: express.Response) =>
 
     const platformMeta = SIEM_PLATFORMS[platform] || SIEM_PLATFORMS.sentinel;
 
-    const conversationContext = history
-      .map((msg: any) => `${msg.role?.toUpperCase() || msg.sender?.toUpperCase() || 'USER'}: ${msg.text || msg.message || ''}`)
-      .filter(Boolean)
-      .join('\n');
+    // Build multi-turn conversational content for Gemini
+    const contents: any[] = [];
+    if (Array.isArray(history) && history.length > 0) {
+      for (const msg of history) {
+        const text = msg.text || msg.message || msg.content || '';
+        if (text && typeof text === 'string' && text.trim()) {
+          const role = (msg.sender === 'user' || msg.role === 'user') ? 'user' : 'model';
+          contents.push({
+            role,
+            parts: [{ text: text.trim() }],
+          });
+        }
+      }
+    }
+    // Append current user message
+    contents.push({
+      role: 'user',
+      parts: [{ text: rawInput.trim() }],
+    });
 
-    const systemPrompt = `You are Google Cyber Sentinel Deep Threat Research Copilot & Elite AI Detection Engineer.
-The user is asking a cybersecurity question, threat hunting request, or SIEM detection query in plain English.
-Irrespective of the user's input complexity (e.g. obscure malware, APT campaigns, zero-day CVEs, LOLBAS techniques, cloud identity anomalies, or custom log formats), conduct exhaustive Google-grade threat research and provide accurate, production-grade output.
+    const systemInstruction = `You are "Ask SOCPulse", the intelligent, versatile generative AI chatbot of the SOCPulse platform.
+You function as a normal, full-featured AI conversational assistant (typical of leading generative AI models like ChatGPT or Gemini) capable of answering ANY user question — irrespective of whether the topic is:
+- Cybersecurity, SOC operations, SIEM detection engineering (Sentinel KQL, Splunk SPL, Elastic EQL, QRadar AQL, etc.), digital forensics, incident response, threat hunting, or MITRE ATT&CK.
+- Software engineering, coding, scripting (Python, Bash, PowerShell, JavaScript/TypeScript, Go, Rust, SQL, regex), system architecture, API design, or debugging.
+- General science, physics, mathematics, networking protocols, cloud platforms, hardware, operating systems.
+- Open-ended conversation, everyday explanations, creative writing, summarization, brainstorming, logic, philosophy, or general knowledge.
 
-Target SIEM Platform: ${platformMeta.name} (${platformMeta.language}).
-
-Guidelines:
-1. Always generate the EXACT, syntax-valid, production-ready ${platformMeta.language} query the user is asking for in "query" and "generatedQuery".
-   - If Splunk: Use native SPL (e.g., index=..., EventCode=..., stats, eval, table, dedup).
-   - If Sentinel/Defender: Use native KQL (e.g., SecurityEvent, DeviceProcessEvents, summarize, project).
-   - If Elastic: Use native EQL or Lucene/ES|QL.
-   - If QRadar: Use native AQL (SELECT ... FROM events WHERE ...).
-   - If Datadog: Use native Datadog Log Search syntax.
-   - If Google SecOps: Use native UDM / YARA-L.
-   - If Snowflake/Athena: Use valid SQL syntax.
-2. In "reply", provide an elite SOC detection analyst response explaining:
-   - What threat or behavior is being detected.
-   - Relevant log sources, Windows Event IDs (e.g. 4688, 4624, 7045), Sysmon Event IDs (1, 3, 7, 8, 10, 11), or Linux/Cloud audit logs.
-   - Attack execution mechanics, living-off-the-land binaries (LOLBINs), or adversary tradecraft.
-   - Proactive tuning recommendations to filter out false positives.
-3. In "mitreTactic" and "mitreTechnique", provide precise MITRE ATT&CK mappings (e.g., "Persistence", "T1053.005 - Scheduled Task/Job").
-4. In "threatActor", identify relevant threat actor groups associated with this technique if applicable (e.g. "APT29 (Cozy Bear)", "Scattered Spider", "Lazarus Group", "FIN7", "Volt Typhoon").
-5. In "cveReferences", provide array of known related CVE IDs if applicable (e.g. ["CVE-2024-3094", "CVE-2023-34362"]).
-6. In "researchInsights", provide 2 to 4 bullet points of high-value threat hunting pivots or forensic telemetry indicators.
-7. In "sources", provide 2 to 4 authoritative reference deep links (e.g., MITRE ATT&CK, CISA Alerts, LOLBAS-Project, SigmaHQ, Microsoft Learn, Splunk Security).
-
-User Request: "${rawInput}"
-
-Previous Conversation History:
-${conversationContext || 'None'}
-
-Return ONLY valid JSON matching this schema:
-{
-  "reply": "Comprehensive, expert SOC analyst breakdown of the threat, detection logic, event IDs, and tuning advice.",
-  "query": "Production-ready ${platformMeta.language} query",
-  "generatedQuery": "Production-ready ${platformMeta.language} query",
-  "mitreTactic": "ATT&CK Tactic Name",
-  "mitreTechnique": "ATT&CK Technique ID & Name (e.g. T1059.001 - PowerShell)",
-  "threatActor": "Associated Threat Group or Campaign (optional)",
-  "cveReferences": ["CVE-YYYY-XXXX"],
-  "researchInsights": [
-    "Threat research insight or pivot query point 1",
-    "Forensic log correlation tip 2"
-  ],
-  "sources": [
-    { "title": "MITRE ATT&CK Technique", "url": "https://attack.mitre.org" },
-    { "title": "LOLBAS Project / CISA Advisory", "url": "https://lolbas-project.github.io" }
-  ],
-  "followUpSuggestions": [
-    "Actionable follow-up prompt 1",
-    "Actionable follow-up prompt 2",
-    "Actionable follow-up prompt 3"
-  ]
-}`;
+CORE INSTRUCTIONS:
+1. Answer EVERY question directly, thoroughly, and articulately. Do not refuse normal questions.
+2. Structure your answers cleanly using Markdown:
+   - Use headings (##, ###) where appropriate.
+   - Use bold text for key terms and concepts.
+   - Use bullet points or numbered steps for readability.
+   - Use code blocks with appropriate syntax language tags (\`\`\`python, \`\`\`kql, \`\`\`spl, \`\`\`bash, \`\`\`json, \`\`\`yaml, etc.) whenever code, queries, or configs are relevant.
+3. If the user asks for a SIEM detection or hunting query (target context: ${platformMeta.name} / ${platformMeta.language}):
+   - Provide the complete, production-ready query in a clean code block.
+   - Explain the detection logic, key event IDs, and log sources.
+   - Mention false-positive tuning tips.
+4. If the user asks a general or non-cybersecurity question:
+   - Answer naturally, conversationally, and insightfully. Never force unwanted SIEM queries or artificial security schemas on unrelated topics.
+5. At the very end of your response, provide 3 helpful follow-up questions the user might want to explore next, formatted strictly as:
+---FOLLOW_UP_SUGGESTIONS---
+- [Follow-up suggestion 1]
+- [Follow-up suggestion 2]
+- [Follow-up suggestion 3]`;
 
     const rawResponse = await callGeminiMultiModel(
-      systemPrompt,
+      contents,
       {
-        systemInstruction: 'You are Google Cyber Sentinel Deep Threat Research Copilot. Provide high-quality threat analysis and syntax-valid SIEM queries in JSON.',
-        jsonMode: true,
-        temperature: 0.2,
+        systemInstruction,
+        temperature: 0.7,
       }
     );
 
-    if (rawResponse) {
-      try {
-        const parsed = JSON.parse(rawResponse);
-        const finalQuery = parsed.query || parsed.generatedQuery || '';
-        return res.json({
-          reply: parsed.reply || 'Detection query generated with Google Threat Intelligence.',
-          query: finalQuery,
-          generatedQuery: finalQuery,
-          mitreTactic: parsed.mitreTactic || 'Execution',
-          mitreTechnique: parsed.mitreTechnique || 'T1059 - Command and Scripting Interpreter',
-          threatActor: parsed.threatActor || null,
-          cveReferences: Array.isArray(parsed.cveReferences) ? parsed.cveReferences : [],
-          researchInsights: Array.isArray(parsed.researchInsights) ? parsed.researchInsights : [],
-          sources: Array.isArray(parsed.sources) && parsed.sources.length > 0 ? parsed.sources : [
-            { title: 'MITRE ATT&CK Enterprise Matrix', url: 'https://attack.mitre.org/' },
-            { title: 'SigmaHQ Detection Rules Repository', url: 'https://github.com/SigmaHQ/sigma' },
-            { title: 'LOLBAS Windows Living Off The Land Project', url: 'https://lolbas-project.github.io/' }
-          ],
-          modelUsed: 'Google Threat Research LLM (Active Auto-Switched)',
-          followUpSuggestions: Array.isArray(parsed.followUpSuggestions) && parsed.followUpSuggestions.length > 0
-            ? parsed.followUpSuggestions
-            : [
-                `How can I tune false positives for this query in ${platformMeta.name}?`,
-                `Translate this query to Splunk SPL and Elastic EQL`,
-                `Show me high-fidelity pivot queries for compromised hosts`,
-              ],
-        });
-      } catch (parseErr) {
-        console.warn('Copilot JSON parse error:', parseErr);
+    if (rawResponse && rawResponse.trim()) {
+      let fullText = rawResponse.trim();
+      let followUpSuggestions: string[] = [];
+
+      // Extract follow-up suggestions if present
+      const followUpSplit = fullText.split('---FOLLOW_UP_SUGGESTIONS---');
+      if (followUpSplit.length > 1) {
+        fullText = followUpSplit[0].trim();
+        const suggestionsBlock = followUpSplit[1].trim();
+        followUpSuggestions = suggestionsBlock
+          .split('\n')
+          .map((line) => line.replace(/^[-*•0-9.)\s]+/, '').trim())
+          .filter((line) => line.length > 3 && line.length < 120)
+          .slice(0, 3);
       }
+
+      // Check if there is an extracted code block or SIEM query
+      let extractedCode: string | undefined = undefined;
+      const codeMatch = fullText.match(/```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)```/);
+      if (codeMatch && codeMatch[1]) {
+        extractedCode = codeMatch[1].trim();
+      }
+
+      // Detect MITRE tactic or technique if mentioned
+      let mitreTactic: string | undefined = undefined;
+      let mitreTechnique: string | undefined = undefined;
+      const mitreTechMatch = fullText.match(/\b(T\d{4}(?:\.\d{3})?)\b/);
+      if (mitreTechMatch) {
+        mitreTechnique = mitreTechMatch[1];
+      }
+
+      return res.json({
+        reply: fullText,
+        query: extractedCode || undefined,
+        generatedQuery: extractedCode || undefined,
+        mitreTactic,
+        mitreTechnique,
+        modelUsed: 'Ask SOCPulse Generative AI',
+        followUpSuggestions: followUpSuggestions.length > 0 ? followUpSuggestions : [
+          'Can you elaborate on this in more detail?',
+          'How can this be applied in a practical scenario?',
+          'What are alternative approaches or best practices?',
+        ],
+      });
     }
 
-    // Autonomous fallback copilot generator
-    const detection = buildUniversalDetection(rawInput, platform as any);
+    // Intelligent Autonomous Fallback if Gemini service is unavailable
+    const lower = rawInput.toLowerCase();
+    const isSecurityQuery =
+      lower.includes('query') ||
+      lower.includes('detect') ||
+      lower.includes('kql') ||
+      lower.includes('spl') ||
+      lower.includes('siem') ||
+      lower.includes('lsass') ||
+      lower.includes('powershell') ||
+      lower.includes('brute force') ||
+      lower.includes('ransomware') ||
+      lower.includes('logon') ||
+      lower.includes('hunt');
+
+    if (isSecurityQuery) {
+      const detection = buildUniversalDetection(rawInput, platform as any);
+      const fpList = detection.tuning?.falsePositives || ['Legitimate administrative activities', 'Scheduled maintenance scripts'];
+      return res.json({
+        reply: `### Threat Detection & Analysis for "${rawInput}"\n\n${detection.detectionLogic}\n\n**Log Sources & Telemetry:**\n${detection.assumptions.map((a: string) => `- ${a}`).join('\n')}\n\n**Production ${platformMeta.name} (${platformMeta.language}) Query:**\n\`\`\`${platformMeta.language.toLowerCase().includes('kql') ? 'kql' : 'sql'}\n${detection.query}\n\`\`\`\n\n**Tuning & False Positives:**\n${fpList.map((fp: string) => `- ${fp}`).join('\n')}`,
+        query: detection.query,
+        generatedQuery: detection.query,
+        mitreTactic: detection.mitreMapping.tactic,
+        mitreTechnique: `${detection.mitreMapping.techniqueId} - ${detection.mitreMapping.techniqueName}`,
+        modelUsed: 'Ask SOCPulse Offline Engine',
+        followUpSuggestions: [
+          `How do I tune false positives for this query in ${platformMeta.name}?`,
+          `Translate this query to other SIEM dialects`,
+          `Show me follow-up investigation pivots`,
+        ],
+      });
+    }
+
+    // Conversational general response fallback
     return res.json({
-      reply: `Here is the production-ready detection logic and query for "${rawInput}" in ${platformMeta.name} (${platformMeta.language}):\n\n${detection.detectionLogic}\n\n**Key Log Sources:** ${detection.assumptions.join(' ')}`,
-      query: detection.query,
-      generatedQuery: detection.query,
-      mitreTactic: detection.mitreMapping.tactic,
-      mitreTechnique: `${detection.mitreMapping.techniqueId} - ${detection.mitreMapping.techniqueName}`,
-      threatActor: null,
-      cveReferences: [],
-      researchInsights: [
-        'Correlate initial execution with parent process lineage to identify suspicious spawn chains.',
-        'Review outbound network telemetry within 10 minutes of process start.'
-      ],
-      sources: [
-        { title: 'MITRE ATT&CK Matrix', url: `https://attack.mitre.org/techniques/${detection.mitreMapping.techniqueId.split('.')[0]}` },
-        { title: 'LOLBAS Project', url: 'https://lolbas-project.github.io/' }
-      ],
-      modelUsed: 'CyberSentinel Universal Detection Engine',
+      reply: `### Response from Ask SOCPulse\n\nThank you for asking about **"${rawInput}"**!\n\nAs the SOCPulse generative AI assistant, I can help analyze questions, write scripts, explain technical mechanisms, or explore open-ended topics.\n\nHere are some key perspectives regarding your question:\n- **Conceptual overview:** You inquired about "${rawInput}".\n- **Next Steps:** You can ask me to write code, break down complex logic, draft security playbooks, or explain any computer science, cybersecurity, or general topic in detail.\n\nFeel free to ask a follow-up or provide more details to explore further!`,
+      modelUsed: 'Ask SOCPulse Assistant',
       followUpSuggestions: [
-        `How do I tune false positives for this query in ${platformMeta.name}?`,
-        `Translate this query to other SIEM platforms`,
-        `Show me pivot investigation queries for this detection`,
+        'Can you provide a step-by-step example?',
+        'How does this work under the hood?',
+        'Can you write a script to demonstrate this?',
       ],
     });
   } catch (err) {
-    console.error('Natural language copilot error:', err);
-    return res.status(500).json({ error: 'Copilot query error' });
+    console.error('Ask SOCPulse chat error:', err);
+    return res.status(500).json({ error: 'Ask SOCPulse chat service error' });
   }
 };
 

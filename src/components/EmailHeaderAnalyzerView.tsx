@@ -782,7 +782,7 @@ export const EmailHeaderAnalyzerView: React.FC<EmailHeaderAnalyzerViewProps> = (
                     className="flex-1 py-1.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-[#060D18] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Zap className="w-3.5 h-3.5 text-[#060D18]" />
-                    Open in SIEM Copilot
+                    Open in Ask SOCPulse
                   </button>
                 )}
               </div>

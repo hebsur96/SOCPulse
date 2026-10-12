@@ -190,7 +190,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
 
                     <p className="text-[11px] font-sans opacity-75 px-1 mb-3">
-                      Visitor and Admin roles both have access to the Email Header Forensics & Analysis engine, IOC investigations, and Copilot.
+                      Visitor and Admin roles both have access to the Email Header Forensics & Analysis engine, IOC investigations, and Ask SOCPulse.
                     </p>
 
                     <div className="space-y-1.5 mb-3">
@@ -247,7 +247,7 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-300">
                         <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                        <span>Natural Language SOC Copilot & Analysis</span>
+                        <span>Ask SOCPulse Generative AI Chat & Analysis</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-300">
                         <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />

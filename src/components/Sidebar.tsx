@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         {
           id: 'copilot',
-          label: 'Ask Copilot',
+          label: 'Ask SOCPulse',
           icon: Sparkles,
           badge: 'AI',
         },

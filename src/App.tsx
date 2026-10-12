@@ -346,7 +346,7 @@ export default function App() {
                     </div>
                     <div className="flex items-center gap-2 text-slate-200">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Natural Language SOC Copilot & Threat Investigations</span>
+                      <span>Ask SOCPulse Generative AI Chat & Threat Investigations</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-200">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
