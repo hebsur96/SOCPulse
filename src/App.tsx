@@ -17,6 +17,7 @@ import { RuleBenchmarkerView } from './components/RuleBenchmarkerView';
 import { IncidentRetroView } from './components/IncidentRetroView';
 import { EmailHeaderAnalyzerView } from './components/EmailHeaderAnalyzerView';
 import { SandboxAnalysisView } from './components/SandboxAnalysisView';
+import { SocPulseLogo } from './components/SocPulseLogo';
 import { ShieldCheck, Lock, X, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -299,12 +300,11 @@ export default function App() {
           >
             <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
               <div className="flex items-center gap-2">
+                <SocPulseLogo size="sm" glow={false} />
                 <span className="text-white font-semibold flex items-center gap-1.5">
                   SOC<span className="text-cyan-400">Pulse</span>
                 </span>
-                <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 text-[10px]">
-                  {userRole === 'visitor' ? 'Visitor Mode' : 'Admin Mode'}
-                </span>
+                <span className="text-slate-500 text-[10px] font-mono">• Enterprise Defense Platform</span>
               </div>
               <span className="text-slate-400">Deep Navy & Cyan • 11 SIEM Engines Supported</span>
             </div>

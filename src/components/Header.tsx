@@ -15,6 +15,7 @@ import {
 import { DeviceFrameMode, SiemPlatformId, ThemeMode, UserRole } from '../types';
 import { SIEM_PLATFORMS, SIEM_PLATFORM_LIST } from '../data/siemPlatforms';
 import { USER_ROLES } from '../data/userRoles';
+import { SocPulseLogo } from './SocPulseLogo';
 
 interface HeaderProps {
   deviceFrame: DeviceFrameMode;
@@ -102,15 +103,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             <div className="flex items-center gap-2.5">
-              <div
-                className={`w-9 h-9 rounded-lg border flex items-center justify-center font-bold transition-all shadow-sm ${
-                  isLight
-                    ? 'bg-cyan-500 text-white border-cyan-600'
-                    : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
-                }`}
-              >
-                <Activity className="w-5 h-5 text-cyan-400" />
-              </div>
+              <SocPulseLogo size="md" glow={true} />
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-base font-bold tracking-tight font-sans text-white">
