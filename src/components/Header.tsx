@@ -11,11 +11,18 @@ import {
   ShieldCheck,
   UserCheck,
   Activity,
+  KeyRound,
+  Shield,
+  Award,
+  LogOut,
+  LogIn,
+  Lock,
 } from 'lucide-react';
 import { DeviceFrameMode, SiemPlatformId, ThemeMode, UserRole } from '../types';
 import { SIEM_PLATFORMS, SIEM_PLATFORM_LIST } from '../data/siemPlatforms';
 import { USER_ROLES } from '../data/userRoles';
 import { SocPulseLogo } from './SocPulseLogo';
+import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
   deviceFrame: DeviceFrameMode;
@@ -28,6 +35,9 @@ interface HeaderProps {
   isSidebarCollapsed?: boolean;
   userRole?: UserRole;
   onUserRoleChange?: (role: UserRole) => void;
+  onOpenMfaModal?: () => void;
+  onOpenCommercialModal?: () => void;
+  onOpenLogin?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,14 +49,22 @@ export const Header: React.FC<HeaderProps> = ({
   onThemeChange,
   onToggleSidebar,
   isSidebarCollapsed = false,
-  userRole = 'visitor',
+  userRole = 'admin',
   onUserRoleChange,
+  onOpenMfaModal,
+  onOpenCommercialModal,
+  onOpenLogin,
 }) => {
+  const { isAuthenticated, user, mfa, license, logout } = useAuth();
+
   const [showPlatformPicker, setShowPlatformPicker] = useState(false);
   const [showRolePicker, setShowRolePicker] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [platformSearch, setPlatformSearch] = useState('');
+
   const platformPickerRef = useRef<HTMLDivElement>(null);
   const rolePickerRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const isLight = theme === 'light';
 
@@ -59,6 +77,9 @@ export const Header: React.FC<HeaderProps> = ({
       }
       if (rolePickerRef.current && !rolePickerRef.current.contains(event.target as Node)) {
         setShowRolePicker(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -109,22 +130,52 @@ export const Header: React.FC<HeaderProps> = ({
                   <h1 className="text-base font-bold tracking-tight font-sans text-white">
                     SOC<span className="text-cyan-400">Pulse</span>
                   </h1>
-                  <span
-                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold ${
-                      isLight
-                        ? 'bg-cyan-50 text-cyan-800 border border-cyan-200'
-                        : 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30'
-                    }`}
+                  {/* Commercial Badge */}
+                  <button
+                    onClick={onOpenCommercialModal}
+                    title="View Commercial Defense Edition & Licensing"
+                    className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/25 transition-all cursor-pointer"
                   >
-                    Enterprise
-                  </span>
+                    <Award className="w-3 h-3 text-cyan-400" />
+                    <span>Commercial Defense</span>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Controls: Role Badge, SIEM Selector, Theme Palette Selector, Device Simulator */}
+          {/* Right Controls: Role Badge, MFA Status, SIEM Selector, User Menu, Theme, Device */}
           <div className="flex items-center gap-2 sm:gap-3">
+            
+            {/* MFA Security Harness Status Indicator Button */}
+            {onOpenMfaModal && (
+              <button
+                onClick={onOpenMfaModal}
+                title="MFA Security Harness & Zero-Trust Posture"
+                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-all ${
+                  mfa.isEnabled
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15'
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/15'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="hidden lg:inline text-[11px] font-semibold">MFA Enforced</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              </button>
+            )}
+
+            {/* Commercial Edition Modal Trigger Button */}
+            {onOpenCommercialModal && (
+              <button
+                onClick={onOpenCommercialModal}
+                title="Commercial Packaging & Licensing"
+                className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#1B3047] bg-[#0B1726] hover:bg-[#101F32] text-xs font-sans text-slate-200 transition-colors"
+              >
+                <Award className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-[11px] font-medium">Pricing & SLA</span>
+              </button>
+            )}
+
             {/* User Role & Permission Mode Selector - Hidden for Visitors */}
             {userRole !== 'visitor' && (
               <div className="relative" ref={rolePickerRef}>
@@ -164,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
                 </button>
 
-                {/* Role Permissions Dropdown / Modal */}
+                {/* Role Permissions Dropdown */}
                 {showRolePicker && (
                   <div
                     className={`absolute right-0 mt-2 w-88 rounded-2xl border p-3 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${
@@ -183,7 +234,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
 
                     <p className="text-[11px] font-sans opacity-75 px-1 mb-3">
-                      Visitor and Admin roles both have access to the Email Header Forensics & Analysis engine, IOC investigations, and Ask SOCPulse.
+                      Both roles can access Email Header Forensics, IOC investigations, and Ask SOCPulse AI.
                     </p>
 
                     <div className="space-y-1.5 mb-3">
@@ -224,33 +275,6 @@ export const Header: React.FC<HeaderProps> = ({
                         );
                       })}
                     </div>
-
-                    {/* Active Permission Checklist */}
-                    <div
-                      className={`p-2.5 rounded-xl border text-[11px] font-mono space-y-1.5 ${
-                        isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#060D18] border-[#1B3047]'
-                      }`}
-                    >
-                      <p className="font-sans font-semibold text-xs opacity-90 mb-1 text-cyan-300">
-                        {currentRoleMeta.label} Access Permissions:
-                      </p>
-                      <div className="flex items-center gap-1.5 text-slate-300">
-                        <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                        <span>Email Header Forensics & Phishing Classifier (Granted)</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-300">
-                        <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                        <span>Ask SOCPulse Generative AI Chat & Analysis</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-300">
-                        <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                        <span>Query Generator across 11 SIEM Engines</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-300">
-                        <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                        <span>IOC Defanger & Reputation Intelligence</span>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -270,17 +294,8 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
-                  <span className="font-sans font-semibold text-xs truncate max-w-[120px] sm:max-w-[150px]">
+                  <span className="font-sans font-semibold text-xs truncate max-w-[100px] sm:max-w-[130px]">
                     {activeSiemMeta.name}
-                  </span>
-                  <span
-                    className={`text-[10px] font-mono px-1 py-0.2 rounded font-semibold hidden md:inline-block ${
-                      isLight
-                        ? 'bg-cyan-50 text-cyan-900 border border-cyan-200'
-                        : 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30'
-                    }`}
-                  >
-                    {activeSiemMeta.language.split(' ')[0]}
                   </span>
                 </div>
                 <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
@@ -368,6 +383,109 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
+            {/* User Profile & Security Menu */}
+            {isAuthenticated ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu((prev) => !prev)}
+                  title="User Profile & Security Controls"
+                  className="flex items-center gap-2 p-1 pl-2 pr-2.5 rounded-lg border border-[#1B3047] bg-[#0B1726] hover:bg-[#101F32] text-xs transition-colors cursor-pointer"
+                >
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-600 to-teal-400 flex items-center justify-center font-mono font-bold text-[10px] text-[#060D18]">
+                    SH
+                  </div>
+                  <span className="font-sans font-semibold text-xs text-slate-200 hidden md:inline-block max-w-[100px] truncate">
+                    {user?.name || 'Sagar Hebsur'}
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+                </button>
+
+                {/* User Menu Dropdown */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-[#1B3047] bg-[#07111F]/98 backdrop-blur-xl p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-slate-100">
+                    <div className="border-b border-[#1B3047] pb-3 mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-teal-400 flex items-center justify-center font-mono font-bold text-sm text-[#060D18]">
+                          SH
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-sans font-bold text-xs text-white truncate">
+                            {user?.name || 'Sagar Hebsur'}
+                          </p>
+                          <p className="font-mono text-[10px] text-cyan-300 truncate">
+                            {user?.email || 'sagarhebsur@gmail.com'}
+                          </p>
+                          <span className="inline-block mt-0.5 text-[9px] font-mono px-1.5 py-0.2 rounded bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                            {license.tier.toUpperCase()} DEFENSE LICENSE
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs">
+                      {onOpenMfaModal && (
+                        <button
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            onOpenMfaModal();
+                          }}
+                          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-[#101F32] transition-colors text-slate-200"
+                        >
+                          <div className="flex items-center gap-2">
+                            <KeyRound className="w-4 h-4 text-cyan-400" />
+                            <span>MFA Security Harness</span>
+                          </div>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300">
+                            Active
+                          </span>
+                        </button>
+                      )}
+
+                      {onOpenCommercialModal && (
+                        <button
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            onOpenCommercialModal();
+                          }}
+                          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-[#101F32] transition-colors text-slate-200"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Award className="w-4 h-4 text-cyan-400" />
+                            <span>Commercial Defense Tier</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-cyan-300">
+                            SLA 99.99%
+                          </span>
+                        </button>
+                      )}
+
+                      <div className="pt-2 border-t border-[#1B3047]">
+                        <button
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            logout();
+                            if (onOpenLogin) onOpenLogin();
+                          }}
+                          className="w-full flex items-center gap-2 p-2 rounded-xl hover:bg-rose-500/10 text-rose-300 transition-colors text-xs cursor-pointer"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Sign Out & Lock Workspace</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={onOpenLogin}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#060D18] font-bold text-xs font-sans transition-all cursor-pointer shadow-md shadow-cyan-500/20"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Sign In / SSO</span>
+              </button>
+            )}
+
             {/* Quick Dark / Light Switcher Buttons */}
             <div
               className={`flex items-center p-0.5 rounded-lg border text-xs font-mono ${
@@ -453,10 +571,10 @@ export const Header: React.FC<HeaderProps> = ({
                 <Tablet className="w-3.5 h-3.5" />
               </button>
             </div>
+
           </div>
         </div>
       </div>
     </header>
   );
 };
-

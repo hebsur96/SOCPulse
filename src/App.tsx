@@ -18,16 +18,27 @@ import { IncidentRetroView } from './components/IncidentRetroView';
 import { EmailHeaderAnalyzerView } from './components/EmailHeaderAnalyzerView';
 import { SandboxAnalysisView } from './components/SandboxAnalysisView';
 import { SocPulseLogo } from './components/SocPulseLogo';
+import { MfaSecurityHarnessModal } from './components/MfaSecurityHarnessModal';
+import { CommercialShowcaseModal } from './components/CommercialShowcaseModal';
+import { LoginPage } from './components/LoginPage';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { ShieldCheck, Lock, X, CheckCircle2 } from 'lucide-react';
 
-export default function App() {
+function AppInner() {
+  const { isAuthenticated } = useAuth();
+
   const [currentView, setCurrentView] = useState<ViewMode>('copilot');
   const [deviceFrame, setDeviceFrame] = useState<DeviceFrameMode>('desktop');
   const [selectedPlatform, setSelectedPlatform] = useState<SiemPlatformId>('sentinel');
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  // Determine default user role:
-  // If ?admin=true or ?role=admin is in URL, or stored in localStorage, set admin.
-  // Otherwise, default to 'visitor' (clean experience for shared URL visitors).
+  const [isVisitorExploring, setIsVisitorExploring] = useState(false);
+
+  // Commercial & MFA modal states
+  const [showMfaModal, setShowMfaModal] = useState<boolean>(false);
+  const [showCommercialModal, setShowCommercialModal] = useState<boolean>(false);
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+
+  // User role state
   const [userRole, setUserRole] = useState<UserRole>(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -46,9 +57,9 @@ export default function App() {
         return savedRole;
       }
     } catch {
-      // ignore in SSR / restricted iframe
+      // ignore
     }
-    return 'visitor';
+    return 'admin';
   });
 
   const handleRoleChange = (role: UserRole) => {
@@ -57,6 +68,7 @@ export default function App() {
       localStorage.setItem('socpulse_role', role);
     } catch {}
   };
+
   const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [exportDetection, setExportDetection] = useState<DetectionBreakdown | null>(null);
@@ -84,6 +96,22 @@ export default function App() {
   };
 
   const isLight = theme === 'light';
+
+  // If user is logged out and not exploring as a visitor, show dedicated LoginPage
+  if (!isAuthenticated && !isVisitorExploring) {
+    return (
+      <LoginPage
+        onSuccessLogin={() => {
+          setIsVisitorExploring(false);
+          setShowLoginModal(false);
+        }}
+        onContinueAsVisitor={() => {
+          setIsVisitorExploring(true);
+          setUserRole('visitor');
+        }}
+      />
+    );
+  }
 
   return (
     <DeviceFrame mode={deviceFrame}>
@@ -120,6 +148,12 @@ export default function App() {
             isSidebarCollapsed={isSidebarCollapsed}
             userRole={userRole}
             onUserRoleChange={handleRoleChange}
+            onOpenMfaModal={() => setShowMfaModal(true)}
+            onOpenCommercialModal={() => setShowCommercialModal(true)}
+            onOpenLogin={() => {
+              setIsVisitorExploring(false);
+              setShowLoginModal(true);
+            }}
           />
 
           {/* Main Content Area with Vertical Sidebar */}
@@ -133,6 +167,8 @@ export default function App() {
               userRole={userRole}
               isCollapsed={isSidebarCollapsed}
               onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+              onOpenMfaModal={() => setShowMfaModal(true)}
+              onOpenCommercialModal={() => setShowCommercialModal(true)}
             />
 
             <main className="flex-1 p-4 sm:p-6 min-w-0 max-w-7xl mx-auto w-full">
@@ -304,11 +340,64 @@ export default function App() {
                 <span className="text-white font-semibold flex items-center gap-1.5">
                   SOC<span className="text-cyan-400">Pulse</span>
                 </span>
-                <span className="text-slate-500 text-[10px] font-mono">• Enterprise Defense Platform</span>
+                <span className="text-slate-500 text-[10px] font-mono">• Enterprise Commercial Defense Platform</span>
               </div>
-              <span className="text-slate-400">Deep Navy & Cyan • 11 SIEM Engines Supported</span>
+              <div className="flex items-center gap-4 text-slate-400">
+                <button
+                  onClick={() => setShowCommercialModal(true)}
+                  className="hover:text-cyan-300 transition-colors cursor-pointer"
+                >
+                  Commercial Licensing
+                </button>
+                <span>•</span>
+                <button
+                  onClick={() => setShowMfaModal(true)}
+                  className="hover:text-cyan-300 transition-colors cursor-pointer"
+                >
+                  MFA Security Harness
+                </button>
+                <span>•</span>
+                <span>Deep Navy & Cyan</span>
+              </div>
             </div>
           </footer>
+
+          {/* Multi-Factor Authentication (MFA) Setup Security Harness Modal */}
+          <MfaSecurityHarnessModal
+            isOpen={showMfaModal}
+            onClose={() => setShowMfaModal(false)}
+          />
+
+          {/* Commercial Showcase & Licensing Modal */}
+          <CommercialShowcaseModal
+            isOpen={showCommercialModal}
+            onClose={() => setShowCommercialModal(false)}
+            onOpenMfaSetup={() => {
+              setShowCommercialModal(false);
+              setShowMfaModal(true);
+            }}
+          />
+
+          {/* Login Page as overlay if explicitly triggered */}
+          {showLoginModal && (
+            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="relative w-full max-w-lg">
+                <button
+                  onClick={() => setShowLoginModal(false)}
+                  className="absolute -top-10 right-0 p-2 text-slate-400 hover:text-white"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+                <LoginPage
+                  onSuccessLogin={() => setShowLoginModal(false)}
+                  onContinueAsVisitor={() => {
+                    setShowLoginModal(false);
+                    setUserRole('visitor');
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Permission Matrix Dialog */}
           {showPermissionModal && (
@@ -411,5 +500,13 @@ export default function App() {
         </div>
       </div>
     </DeviceFrame>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }
