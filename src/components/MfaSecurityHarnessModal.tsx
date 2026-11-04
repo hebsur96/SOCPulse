@@ -91,7 +91,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Simple Multi-Factor Authentication for <span className="text-cyan-300 font-mono font-medium">{user?.email || user?.mobile || 'sagarhebsur@gmail.com'}</span>
+                Simple Multi-Factor Authentication for <span className="text-cyan-300 font-mono font-medium">{user?.email || user?.mobile || 'Active Account'}</span>
               </p>
             </div>
           </div>
@@ -249,7 +249,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                   One-Time Password (OTP) verification for
                 </p>
                 <p className="text-xs font-mono font-bold text-cyan-300">
-                  {user?.email || user?.mobile || 'sagarhebsur@gmail.com'}
+                  {user?.email || user?.mobile || 'User Account'}
                 </p>
               </div>
 

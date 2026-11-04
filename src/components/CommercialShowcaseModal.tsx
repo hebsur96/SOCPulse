@@ -74,7 +74,7 @@ SOCPulse Enterprise Defense Platform - Official Commercial Quote
 Reference ID: SOCP-QUOTE-${Date.now().toString(36).toUpperCase()}
 Generated: ${new Date().toLocaleDateString()}
 Issued For: ${quoteOrgName}
-Authorized Contact: ${user?.email || 'sagarhebsur@gmail.com'} (${user?.name || 'Sagar Hebsur'})
+Authorized Contact: ${user?.email || user?.mobile || 'Client Analyst'} (${user?.name || 'Authorized Licensee'})
 ===========================================================
 
 TIER & LICENSING DETAILS:

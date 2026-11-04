@@ -24,7 +24,7 @@ const DEFAULT_LICENSE: CommercialLicense = {
   key: 'SOCP-ENT-2026-COMMERCIAL-X992',
   tier: 'enterprise',
   organizationName: 'Global Cyber Defense Operations',
-  licenseeEmail: 'sagarhebsur@gmail.com',
+  licenseeEmail: '',
   seatsTotal: 50,
   seatsAllocated: 14,
   issuedAt: '2026-01-01T00:00:00Z',
@@ -43,16 +43,7 @@ const DEFAULT_LICENSE: CommercialLicense = {
   },
 };
 
-const PRE_SEEDED_ACCOUNTS: RegisteredAccount[] = [
-  {
-    identifier: 'sagarhebsur@gmail.com',
-    type: 'email',
-    passwordHash: 'Password123!',
-    name: 'Sagar Hebsur',
-    registeredAt: '2026-01-01T00:00:00Z',
-    totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
-  },
-];
+const PRE_SEEDED_ACCOUNTS: RegisteredAccount[] = [];
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
@@ -257,7 +248,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       key: trimmed,
       tier: detectedTier,
       organizationName: user?.organization || 'Commercial Licensed Organization',
-      licenseeEmail: user?.email || 'sagarhebsur@gmail.com',
+      licenseeEmail: user?.email || user?.mobile || 'active-member@socpulse.io',
       seatsTotal: detectedTier === 'enterprise' ? 100 : 10,
       seatsAllocated: 5,
       issuedAt: new Date().toISOString(),

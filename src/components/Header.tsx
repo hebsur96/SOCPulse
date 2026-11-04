@@ -391,7 +391,7 @@ export const Header: React.FC<HeaderProps> = ({
                             {user?.name || (isOwnerAdmin ? 'Sagar Hebsur' : 'Security Analyst')}
                           </p>
                           <p className="font-mono text-[10px] text-cyan-300 truncate">
-                            {user?.email || user?.mobile || 'sagarhebsur@gmail.com'}
+                            {user?.email || user?.mobile || (isOwnerAdmin ? 'sagarhebsur@gmail.com' : 'analyst@socpulse.io')}
                           </p>
                           <span className="inline-block mt-0.5 text-[9px] font-mono px-1.5 py-0.2 rounded bg-teal-500/15 text-teal-300 border border-teal-500/30">
                             {isOwnerAdmin ? 'ADMIN & OWNER' : 'ANALYST MEMBER'}

@@ -36,11 +36,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
   // Registration type: 'email' | 'mobile'
   const [regType, setRegType] = useState<'email' | 'mobile'>('email');
 
-  // Form Fields
+  // Form Fields - Blank by default so users enter their own details
   const [fullName, setFullName] = useState('');
-  const [identifier, setIdentifier] = useState('sagarhebsur@gmail.com');
-  const [password, setPassword] = useState('Password123!');
-  const [confirmPassword, setConfirmPassword] = useState('Password123!');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Status & Errors
@@ -206,30 +206,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                 </button>
               </div>
 
-              {/* Quick autofill chip for demo */}
-              {authMode === 'login' && (
-                <div className="p-2.5 rounded-xl border border-cyan-500/20 bg-cyan-500/5 text-xs flex items-center justify-between">
-                  <div className="truncate mr-2">
-                    <span className="text-[10px] font-mono text-cyan-300 block uppercase font-bold">
-                      Pre-Configured Lead SOC Account:
-                    </span>
-                    <span className="text-slate-300 font-mono text-[11px] truncate block">
-                      sagarhebsur@gmail.com
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIdentifier('sagarhebsur@gmail.com');
-                      setPassword('Password123!');
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-mono font-bold transition-colors shrink-0"
-                  >
-                    Autofill
-                  </button>
-                </div>
-              )}
-
               {/* REGISTER SUB-OPTIONS: Email vs Mobile Number */}
               {authMode === 'register' && (
                 <div className="space-y-2">
@@ -241,7 +217,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                       type="button"
                       onClick={() => {
                         setRegType('email');
-                        setIdentifier('sagarhebsur@gmail.com');
+                        setIdentifier('');
                       }}
                       className={`p-2 rounded-lg border text-xs font-sans font-semibold flex items-center justify-center gap-2 transition-colors ${
                         regType === 'email'
@@ -256,7 +232,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                       type="button"
                       onClick={() => {
                         setRegType('mobile');
-                        setIdentifier('+1 555-839-2041');
+                        setIdentifier('');
                       }}
                       className={`p-2 rounded-lg border text-xs font-sans font-semibold flex items-center justify-center gap-2 transition-colors ${
                         regType === 'mobile'
@@ -286,7 +262,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                       <User className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                       <input
                         type="text"
-                        placeholder="e.g. Sagar Hebsur"
+                        placeholder="Enter your full name"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
                         className="w-full text-xs font-sans pl-9 pr-3 py-2.5 rounded-xl bg-[#060D18] border border-[#1B3047] text-white focus:outline-none focus:border-cyan-400"
@@ -316,7 +292,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                       placeholder={
                         authMode === 'register' && regType === 'mobile'
                           ? '+1 (555) 000-0000'
-                          : 'sagarhebsur@gmail.com'
+                          : 'name@company.com'
                       }
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
