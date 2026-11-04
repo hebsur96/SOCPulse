@@ -42,7 +42,6 @@ interface SidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onOpenMfaModal?: () => void;
-  onOpenCommercialModal?: () => void;
 }
 
 interface NavItem {
@@ -68,7 +67,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse,
   onOpenMfaModal,
-  onOpenCommercialModal,
 }) => {
   const [isSiemExpanded, setIsSiemExpanded] = useState(true);
   const [siemSearch, setSiemSearch] = useState('');
@@ -431,58 +429,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Commercial & MFA Security Quick Controls */}
-      <div className="p-2 border-t border-inherit space-y-1">
-        {onOpenCommercialModal && (
-          <button
-            onClick={onOpenCommercialModal}
-            title="Commercial Defense Edition & Licensing"
-            className={`w-full flex items-center ${
-              isCollapsed ? 'justify-center p-2' : 'justify-between px-3 py-2'
-            } rounded-xl border text-xs font-sans transition-all cursor-pointer ${
-              isLight
-                ? 'bg-gradient-to-r from-cyan-50 to-white border-cyan-200 text-cyan-900 hover:border-cyan-300'
-                : 'bg-gradient-to-r from-cyan-950/40 to-[#0B1726] border-cyan-500/30 text-cyan-300 hover:border-cyan-400'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <Award className="w-4 h-4 text-cyan-400 shrink-0" />
-              {!isCollapsed && (
-                <span className="font-semibold text-xs truncate">Commercial Edition</span>
-              )}
-            </div>
-            {!isCollapsed && (
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold">
-                Tier
-              </span>
-            )}
-          </button>
-        )}
 
-        {onOpenMfaModal && (
-          <button
-            onClick={onOpenMfaModal}
-            title="MFA Security Harness & Zero-Trust"
-            className={`w-full flex items-center ${
-              isCollapsed ? 'justify-center p-2' : 'justify-between px-3 py-2'
-            } rounded-xl border text-xs font-sans transition-all cursor-pointer ${
-              isLight
-                ? 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                : 'bg-[#0B1726] border-[#1B3047] text-slate-300 hover:bg-[#101F32]'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              {!isCollapsed && (
-                <span className="font-medium text-xs truncate">MFA Security Harness</span>
-              )}
-            </div>
-            {!isCollapsed && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            )}
-          </button>
-        )}
-      </div>
 
       {/* Bottom SIEM Platform Indicator */}
       {!isCollapsed && (

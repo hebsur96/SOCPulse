@@ -61,6 +61,7 @@ export interface RegisteredAccount {
 
 export interface AuthState {
   isAuthenticated: boolean;
+  isOwnerAdmin: boolean;
   user: UserProfile | null;
   mfa: MfaConfig;
   license: CommercialLicense;

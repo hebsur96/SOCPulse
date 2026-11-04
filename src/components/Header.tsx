@@ -36,7 +36,6 @@ interface HeaderProps {
   userRole?: UserRole;
   onUserRoleChange?: (role: UserRole) => void;
   onOpenMfaModal?: () => void;
-  onOpenCommercialModal?: () => void;
   onOpenLogin?: () => void;
 }
 
@@ -52,10 +51,9 @@ export const Header: React.FC<HeaderProps> = ({
   userRole = 'admin',
   onUserRoleChange,
   onOpenMfaModal,
-  onOpenCommercialModal,
   onOpenLogin,
 }) => {
-  const { isAuthenticated, user, mfa, license, logout } = useAuth();
+  const { isAuthenticated, isOwnerAdmin, user, mfa, license, logout } = useAuth();
 
   const [showPlatformPicker, setShowPlatformPicker] = useState(false);
   const [showRolePicker, setShowRolePicker] = useState(false);
@@ -130,54 +128,16 @@ export const Header: React.FC<HeaderProps> = ({
                   <h1 className="text-base font-bold tracking-tight font-sans text-white">
                     SOC<span className="text-cyan-400">Pulse</span>
                   </h1>
-                  {/* Commercial Badge */}
-                  <button
-                    onClick={onOpenCommercialModal}
-                    title="View Commercial Defense Edition & Licensing"
-                    className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/25 transition-all cursor-pointer"
-                  >
-                    <Award className="w-3 h-3 text-cyan-400" />
-                    <span>Commercial Defense</span>
-                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Controls: Role Badge, MFA Status, SIEM Selector, User Menu, Theme, Device */}
+          {/* Right Controls: Role Badge (Owner only), SIEM Selector, User Menu, Theme, Device */}
           <div className="flex items-center gap-2 sm:gap-3">
-            
-            {/* MFA Security Harness Status Indicator Button */}
-            {onOpenMfaModal && (
-              <button
-                onClick={onOpenMfaModal}
-                title="MFA Security Harness & Zero-Trust Posture"
-                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-all ${
-                  mfa.isEnabled
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15'
-                    : 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/15'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="hidden lg:inline text-[11px] font-semibold">MFA Enforced</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              </button>
-            )}
 
-            {/* Commercial Edition Modal Trigger Button */}
-            {onOpenCommercialModal && (
-              <button
-                onClick={onOpenCommercialModal}
-                title="Commercial Packaging & Licensing"
-                className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#1B3047] bg-[#0B1726] hover:bg-[#101F32] text-xs font-sans text-slate-200 transition-colors"
-              >
-                <Award className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-[11px] font-medium">Pricing & SLA</span>
-              </button>
-            )}
-
-            {/* User Role & Permission Mode Selector - Hidden for Visitors */}
-            {userRole !== 'visitor' && (
+            {/* Admin Role Tab & Selector - Strictly Visible ONLY to sagarhebsur@gmail.com */}
+            {isOwnerAdmin && userRole !== 'visitor' && (
               <div className="relative" ref={rolePickerRef}>
                 <button
                   id="header-role-selector-btn"
@@ -392,10 +352,19 @@ export const Header: React.FC<HeaderProps> = ({
                   className="flex items-center gap-2 p-1 pl-2 pr-2.5 rounded-lg border border-[#1B3047] bg-[#0B1726] hover:bg-[#101F32] text-xs transition-colors cursor-pointer"
                 >
                   <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-600 to-teal-400 flex items-center justify-center font-mono font-bold text-[10px] text-[#060D18]">
-                    SH
+                    {user?.name
+                      ? user.name
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .substring(0, 2)
+                          .toUpperCase()
+                      : isOwnerAdmin
+                      ? 'SH'
+                      : 'AN'}
                   </div>
-                  <span className="font-sans font-semibold text-xs text-slate-200 hidden md:inline-block max-w-[100px] truncate">
-                    {user?.name || 'Sagar Hebsur'}
+                  <span className="font-sans font-semibold text-xs text-slate-200 hidden md:inline-block max-w-[120px] truncate">
+                    {user?.name || user?.email || user?.mobile || 'Sagar Hebsur'}
                   </span>
                   <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
                 </button>
@@ -406,17 +375,26 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="border-b border-[#1B3047] pb-3 mb-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-teal-400 flex items-center justify-center font-mono font-bold text-sm text-[#060D18]">
-                          SH
+                          {user?.name
+                            ? user.name
+                                .split(' ')
+                                .map((n) => n[0])
+                                .join('')
+                                .substring(0, 2)
+                                .toUpperCase()
+                            : isOwnerAdmin
+                            ? 'SH'
+                            : 'AN'}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="font-sans font-bold text-xs text-white truncate">
-                            {user?.name || 'Sagar Hebsur'}
+                            {user?.name || (isOwnerAdmin ? 'Sagar Hebsur' : 'Security Analyst')}
                           </p>
                           <p className="font-mono text-[10px] text-cyan-300 truncate">
-                            {user?.email || 'sagarhebsur@gmail.com'}
+                            {user?.email || user?.mobile || 'sagarhebsur@gmail.com'}
                           </p>
                           <span className="inline-block mt-0.5 text-[9px] font-mono px-1.5 py-0.2 rounded bg-teal-500/15 text-teal-300 border border-teal-500/30">
-                            {license.tier.toUpperCase()} DEFENSE LICENSE
+                            {isOwnerAdmin ? 'ADMIN & OWNER' : 'ANALYST MEMBER'}
                           </span>
                         </div>
                       </div>
@@ -441,23 +419,7 @@ export const Header: React.FC<HeaderProps> = ({
                         </button>
                       )}
 
-                      {onOpenCommercialModal && (
-                        <button
-                          onClick={() => {
-                            setShowUserMenu(false);
-                            onOpenCommercialModal();
-                          }}
-                          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-[#101F32] transition-colors text-slate-200"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Award className="w-4 h-4 text-cyan-400" />
-                            <span>Commercial Defense Tier</span>
-                          </div>
-                          <span className="text-[10px] font-mono text-cyan-300">
-                            SLA 99.99%
-                          </span>
-                        </button>
-                      )}
+
 
                       <div className="pt-2 border-t border-[#1B3047]">
                         <button

@@ -19,51 +19,28 @@ import { EmailHeaderAnalyzerView } from './components/EmailHeaderAnalyzerView';
 import { SandboxAnalysisView } from './components/SandboxAnalysisView';
 import { SocPulseLogo } from './components/SocPulseLogo';
 import { MfaSecurityHarnessModal } from './components/MfaSecurityHarnessModal';
-import { CommercialShowcaseModal } from './components/CommercialShowcaseModal';
 import { LoginPage } from './components/LoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ShieldCheck, Lock, X, CheckCircle2 } from 'lucide-react';
 
 function AppInner() {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, isOwnerAdmin, logout } = useAuth();
 
   const [currentView, setCurrentView] = useState<ViewMode>('copilot');
   const [deviceFrame, setDeviceFrame] = useState<DeviceFrameMode>('desktop');
   const [selectedPlatform, setSelectedPlatform] = useState<SiemPlatformId>('sentinel');
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  // Commercial & MFA modal states
-  const [showMfaModal, setShowMfaModal] = useState<boolean>(false);
-  const [showCommercialModal, setShowCommercialModal] = useState<boolean>(false);
 
-  // User role state
-  const [userRole, setUserRole] = useState<UserRole>(() => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const roleParam = urlParams.get('role');
-      const adminParam = urlParams.get('admin');
-      if (roleParam === 'admin' || adminParam === 'true' || adminParam === '1') {
-        localStorage.setItem('socpulse_role', 'admin');
-        return 'admin';
-      }
-      if (roleParam === 'visitor') {
-        localStorage.setItem('socpulse_role', 'visitor');
-        return 'visitor';
-      }
-      const savedRole = localStorage.getItem('socpulse_role') as UserRole | null;
-      if (savedRole === 'admin' || savedRole === 'visitor') {
-        return savedRole;
-      }
-    } catch {
-      // ignore
-    }
-    return 'admin';
-  });
+  // MFA modal state
+  const [showMfaModal, setShowMfaModal] = useState<boolean>(false);
+
+  // User role state - Strictly locked to visitor for any user other than sagarhebsur@gmail.com
+  const [userRole, setUserRole] = useState<UserRole>('admin');
+  const effectiveUserRole: UserRole = isOwnerAdmin ? userRole : 'visitor';
 
   const handleRoleChange = (role: UserRole) => {
+    if (!isOwnerAdmin) return;
     setUserRole(role);
-    try {
-      localStorage.setItem('socpulse_role', role);
-    } catch {}
   };
 
   const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
@@ -75,15 +52,15 @@ function AppInner() {
   const [investigateIoc, setInvestigateIoc] = useState<string | undefined>(undefined);
   const [sandboxTarget, setSandboxTarget] = useState<string | undefined>(undefined);
 
-  // If visitor is active and on a restricted tab, switch to copilot
+  // If user is not the owner admin, hide and restrict admin tabs
   useEffect(() => {
     if (
-      userRole === 'visitor' &&
+      !isOwnerAdmin &&
       (currentView === 'attack_path' || currentView === 'rule_benchmarker' || currentView === 'playbooks')
     ) {
       setCurrentView('copilot');
     }
-  }, [userRole, currentView]);
+  }, [isOwnerAdmin, currentView]);
 
   const getThemeClasses = (t: ThemeMode) => {
     if (t === 'light') {
@@ -132,10 +109,9 @@ function AppInner() {
             onThemeChange={setTheme}
             onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
             isSidebarCollapsed={isSidebarCollapsed}
-            userRole={userRole}
+            userRole={effectiveUserRole}
             onUserRoleChange={handleRoleChange}
             onOpenMfaModal={() => setShowMfaModal(true)}
-            onOpenCommercialModal={() => setShowCommercialModal(true)}
             onOpenLogin={logout}
           />
 
@@ -147,11 +123,10 @@ function AppInner() {
               theme={theme}
               selectedPlatform={selectedPlatform}
               onPlatformChange={setSelectedPlatform}
-              userRole={userRole}
+              userRole={effectiveUserRole}
               isCollapsed={isSidebarCollapsed}
               onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
               onOpenMfaModal={() => setShowMfaModal(true)}
-              onOpenCommercialModal={() => setShowCommercialModal(true)}
             />
 
             <main className="flex-1 p-4 sm:p-6 min-w-0 max-w-7xl mx-auto w-full">
@@ -159,7 +134,7 @@ function AppInner() {
                 <NaturalQueryCopilotView
                   selectedPlatform={selectedPlatform}
                   onPlatformChange={setSelectedPlatform}
-                  userRole={userRole}
+                  userRole={effectiveUserRole}
                   onLoadQueryInGenerator={(query, platform) => {
                     setSelectedPlatform(platform);
                     setTransferredPrompt(query);
@@ -178,8 +153,8 @@ function AppInner() {
                 />
               )}
 
-              {/* Only non-visitors can view these restricted views */}
-              {userRole !== 'visitor' && currentView === 'attack_path' && (
+              {/* Only the owner admin (sagarhebsur@gmail.com) can view these restricted admin views */}
+              {isOwnerAdmin && effectiveUserRole !== 'visitor' && currentView === 'attack_path' && (
                 <AttackPathSimulatorView
                   onSendToGenerator={(promptText) => {
                     setTransferredPrompt(promptText);
@@ -188,7 +163,7 @@ function AppInner() {
                 />
               )}
 
-              {userRole !== 'visitor' && currentView === 'rule_benchmarker' && (
+              {isOwnerAdmin && effectiveUserRole !== 'visitor' && currentView === 'rule_benchmarker' && (
                 <RuleBenchmarkerView
                   onSendToOptimizer={(query, platform) => {
                     setSelectedPlatform(platform);
@@ -204,7 +179,7 @@ function AppInner() {
                     setTransferredPrompt(promptText);
                     setCurrentView('generator');
                   }}
-                  userRole={userRole}
+                  userRole={effectiveUserRole}
                 />
               )}
 
@@ -258,7 +233,7 @@ function AppInner() {
                     setTransferredPrompt(`Hunt for emails using this query:\n${query}`);
                     setCurrentView('copilot');
                   }}
-                  userRole={userRole}
+                  userRole={effectiveUserRole}
                 />
               )}
 
@@ -268,7 +243,7 @@ function AppInner() {
                   onPlatformChange={setSelectedPlatform}
                   onExport={setExportDetection}
                   initialPrompt={transferredPrompt}
-                  userRole={userRole}
+                  userRole={effectiveUserRole}
                 />
               )}
 
@@ -276,7 +251,7 @@ function AppInner() {
                 <MultiPlatformTranslatorView
                   initialQuery={transferredQuery}
                   initialSourcePlatform={selectedPlatform}
-                  userRole={userRole}
+                  userRole={effectiveUserRole}
                 />
               )}
 
@@ -284,11 +259,11 @@ function AppInner() {
                 <QueryOptimizerView
                   initialQuery={transferredQuery}
                   initialPlatform={selectedPlatform}
-                  userRole={userRole}
+                  userRole={effectiveUserRole}
                 />
               )}
 
-              {userRole !== 'visitor' && currentView === 'playbooks' && (
+              {isOwnerAdmin && effectiveUserRole !== 'visitor' && currentView === 'playbooks' && (
                 <ThreatLibraryView
                   onSelectPlaybookQuery={(query, platform) => {
                     setSelectedPlatform(platform);
@@ -323,24 +298,10 @@ function AppInner() {
                 <span className="text-white font-semibold flex items-center gap-1.5">
                   SOC<span className="text-cyan-400">Pulse</span>
                 </span>
-                <span className="text-slate-500 text-[10px] font-mono">• Enterprise Commercial Defense Platform</span>
+                <span className="text-slate-500 text-[10px] font-mono">• Multi-Engine SIEM & Detection Platform</span>
               </div>
               <div className="flex items-center gap-4 text-slate-400">
-                <button
-                  onClick={() => setShowCommercialModal(true)}
-                  className="hover:text-cyan-300 transition-colors cursor-pointer"
-                >
-                  Commercial Licensing
-                </button>
-                <span>•</span>
-                <button
-                  onClick={() => setShowMfaModal(true)}
-                  className="hover:text-cyan-300 transition-colors cursor-pointer"
-                >
-                  MFA Security Harness
-                </button>
-                <span>•</span>
-                <span>Deep Navy & Cyan</span>
+                <span>Deep Navy & Cyan • 11 SIEM Engines Supported</span>
               </div>
             </div>
           </footer>
@@ -351,15 +312,7 @@ function AppInner() {
             onClose={() => setShowMfaModal(false)}
           />
 
-          {/* Commercial Showcase & Licensing Modal */}
-          <CommercialShowcaseModal
-            isOpen={showCommercialModal}
-            onClose={() => setShowCommercialModal(false)}
-            onOpenMfaSetup={() => {
-              setShowCommercialModal(false);
-              setShowMfaModal(true);
-            }}
-          />
+
 
 
 

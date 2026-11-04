@@ -162,14 +162,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return [...filtered, newAccount];
     });
 
+    const isOwner = cleanId === 'sagarhebsur@gmail.com';
+
     // Setup active user profile pending MFA completion
     const newUserProfile: UserProfile = {
       id: `usr-${Date.now().toString(36)}`,
       email: type === 'email' ? cleanId : undefined,
       mobile: type === 'mobile' ? cleanId : undefined,
       name: cleanName,
-      role: 'admin',
-      title: 'Registered Security Analyst',
+      role: isOwner ? 'admin' : 'visitor',
+      title: isOwner ? 'Lead SOC Architect & Security Director' : 'Security Analyst',
       organization: 'Cyber Defense Center of Excellence',
       lastLogin: new Date().toISOString(),
       mfaVerified: false,
@@ -187,15 +189,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     const isEmail = cleanId.includes('@');
-    const displayName = existing?.name || (cleanId.includes('sagar') ? 'Sagar Hebsur' : cleanId.split('@')[0]);
+    const isOwner = cleanId === 'sagarhebsur@gmail.com';
+    const displayName = existing?.name || (isOwner ? 'Sagar Hebsur' : cleanId.split('@')[0]);
 
     const loggedInUser: UserProfile = {
       id: `usr-${Date.now().toString(36)}`,
       email: isEmail ? cleanId : undefined,
       mobile: !isEmail ? cleanId : undefined,
       name: displayName,
-      role: 'admin',
-      title: cleanId.includes('sagar') ? 'Lead SOC Architect & Security Director' : 'Senior SOC Analyst',
+      role: isOwner ? 'admin' : 'visitor',
+      title: isOwner ? 'Lead SOC Architect & Security Director' : 'Security Analyst',
       organization: 'Cyber Defense Center of Excellence',
       lastLogin: new Date().toISOString(),
       mfaVerified: false,
@@ -281,10 +284,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
+  const isOwnerAdmin = user?.email?.trim().toLowerCase() === 'sagarhebsur@gmail.com';
+
   return (
     <AuthContext.Provider
       value={{
         isAuthenticated,
+        isOwnerAdmin,
         user,
         mfa,
         license,
