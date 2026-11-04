@@ -63,11 +63,11 @@ export const CommercialShowcaseModal: React.FC<CommercialShowcaseModalProps> = (
     const calculatedPrice =
       quoteTier === 'enterprise'
         ? selectedBilling === 'annual'
-          ? 1499 * 12 * 0.8
-          : 1499 * 12
+          ? 79 * 12
+          : 99 * 12
         : selectedBilling === 'annual'
-        ? 499 * 12 * 0.8
-        : 499 * 12;
+        ? 19 * 12
+        : 29 * 12;
 
     const quoteText = `===========================================================
 SOCPulse Enterprise Defense Platform - Official Commercial Quote
@@ -290,12 +290,12 @@ Enterprise Payment Terms: Net 30 upon invoice.
 
                 <div className="mb-5 pb-4 border-b border-[#1B3047]">
                   <span className="text-3xl font-bold font-sans text-white">
-                    ${selectedBilling === 'annual' ? '399' : '499'}
+                    ${selectedBilling === 'annual' ? '19' : '29'}
                   </span>
                   <span className="text-xs text-slate-400 font-mono"> / month</span>
                   {selectedBilling === 'annual' && (
                     <span className="block text-[11px] text-emerald-400 font-mono mt-0.5">
-                      Billed annually ($4,788/yr)
+                      Billed annually ($228/yr - Save 35%)
                     </span>
                   )}
                 </div>
@@ -354,11 +354,11 @@ Enterprise Payment Terms: Net 30 upon invoice.
 
                 <div className="mb-5 pb-4 border-b border-[#1B3047]">
                   <span className="text-3xl font-bold font-sans text-white">
-                    ${selectedBilling === 'annual' ? '1,199' : '1,499'}
+                    ${selectedBilling === 'annual' ? '79' : '99'}
                   </span>
                   <span className="text-xs text-slate-400 font-mono"> / month (Base)</span>
                   <span className="block text-[11px] text-teal-300 font-mono mt-0.5">
-                    Unlimited Analyst Seats Available
+                    {selectedBilling === 'annual' ? 'Billed annually ($948/yr - Save 20%)' : 'Unlimited Analyst Seats Available'}
                   </span>
                 </div>
 
@@ -530,8 +530,8 @@ Enterprise Payment Terms: Net 30 upon invoice.
                   onChange={(e) => setQuoteTier(e.target.value as CommercialTier)}
                   className="w-full text-xs px-3 py-2 rounded-lg bg-[#060D18] border border-[#1B3047] text-cyan-300 focus:outline-none focus:border-cyan-400 font-mono"
                 >
-                  <option value="pro">SOC Pro Team ($499/mo)</option>
-                  <option value="enterprise">Enterprise Sovereign Defense ($1,499/mo)</option>
+                  <option value="pro">SOC Pro Team ($29/mo or $19/mo annual)</option>
+                  <option value="enterprise">Enterprise Sovereign Defense ($99/mo or $79/mo annual)</option>
                 </select>
               </div>
 

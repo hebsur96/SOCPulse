@@ -1,29 +1,22 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AuthState, UserProfile, MfaConfig, CommercialLicense, MfaMethodType, CommercialTier } from '../types/auth';
-
-const DEFAULT_BACKUP_CODES = [
-  '8F2A-99B1',
-  'C41E-77D0',
-  '93BA-10FE',
-  '55DE-82A4',
-  '7B90-64C2',
-  '19EC-441F',
-  '62DA-99E8',
-  '41AB-33CD',
-];
+import {
+  AuthState,
+  UserProfile,
+  MfaConfig,
+  CommercialLicense,
+  MfaMethodType,
+  CommercialTier,
+  RegisteredAccount,
+} from '../types/auth';
 
 const DEFAULT_MFA: MfaConfig = {
   isEnabled: true,
   isEnforced: true,
-  activeMethods: ['totp', 'hardware_key', 'backup_codes'],
+  activeMethods: ['totp', 'otp'],
   totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
   totpEnrolledAt: '2026-03-15T08:30:00Z',
-  hardwareKeyName: 'YubiKey 5C NFC (Primary)',
-  hardwareKeyRegisteredAt: '2026-03-20T14:15:00Z',
-  backupCodes: DEFAULT_BACKUP_CODES,
-  backupCodesRemaining: 8,
-  lastVerifiedAt: new Date().toISOString(),
-  enforceForAdminActions: true,
+  otpCode: '492815',
+  lastVerifiedAt: undefined,
   sessionTimeoutMinutes: 60,
 };
 
@@ -50,38 +43,50 @@ const DEFAULT_LICENSE: CommercialLicense = {
   },
 };
 
-const DEFAULT_USER: UserProfile = {
-  id: 'usr-sec-001',
-  email: 'sagarhebsur@gmail.com',
-  name: 'Sagar Hebsur',
-  role: 'admin',
-  title: 'Lead SOC Architect & Security Director',
-  organization: 'Cyber Defense Center of Excellence',
-  avatarUrl: '',
-  lastLogin: new Date().toISOString(),
-  mfaVerified: true,
-  authProvider: 'password',
-};
+const PRE_SEEDED_ACCOUNTS: RegisteredAccount[] = [
+  {
+    identifier: 'sagarhebsur@gmail.com',
+    type: 'email',
+    passwordHash: 'Password123!',
+    name: 'Sagar Hebsur',
+    registeredAt: '2026-01-01T00:00:00Z',
+    totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
+  },
+];
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Whenever users access this app, FIRST the login page should appear.
+  // Default to false on first page load.
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      const stored = localStorage.getItem('socpulse_auth_state');
-      if (stored !== null) {
-        return stored === 'true';
+      // Use sessionStorage so closing the tab or opening fresh requires login,
+      // while refreshing during an active session can remain logged in if desired.
+      const sessionActive = sessionStorage.getItem('socpulse_session_active');
+      return sessionActive === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [registeredAccounts, setRegisteredAccounts] = useState<RegisteredAccount[]>(() => {
+    try {
+      const stored = localStorage.getItem('socpulse_registered_users');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
-    return true; // Default to authenticated for direct frictionless use
+    return PRE_SEEDED_ACCOUNTS;
   });
 
   const [user, setUser] = useState<UserProfile | null>(() => {
     try {
-      const stored = localStorage.getItem('socpulse_user');
+      const stored = sessionStorage.getItem('socpulse_current_user');
       if (stored) return JSON.parse(stored);
     } catch {}
-    return DEFAULT_USER;
+    return null;
   });
 
   const [mfa, setMfa] = useState<MfaConfig>(() => {
@@ -102,19 +107,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     try {
-      localStorage.setItem('socpulse_auth_state', String(isAuthenticated));
+      localStorage.setItem('socpulse_registered_users', JSON.stringify(registeredAccounts));
     } catch {}
-  }, [isAuthenticated]);
+  }, [registeredAccounts]);
 
   useEffect(() => {
     try {
       if (user) {
-        localStorage.setItem('socpulse_user', JSON.stringify(user));
+        sessionStorage.setItem('socpulse_current_user', JSON.stringify(user));
       } else {
-        localStorage.removeItem('socpulse_user');
+        sessionStorage.removeItem('socpulse_current_user');
       }
     } catch {}
   }, [user]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('socpulse_session_active', String(isAuthenticated));
+    } catch {}
+  }, [isAuthenticated]);
 
   useEffect(() => {
     try {
@@ -128,77 +139,95 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
   }, [license]);
 
-  const login = async (
-    email: string,
-    _password?: string,
-    provider: UserProfile['authProvider'] = 'password'
+  const register = async (
+    identifier: string,
+    password: string,
+    name?: string,
+    type: 'email' | 'mobile' = 'email'
   ): Promise<boolean> => {
-    // Artificial small delay for realistic auth security handshake
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    const cleanId = identifier.trim().toLowerCase();
+    const cleanName = name?.trim() || cleanId.split('@')[0];
+
+    const newAccount: RegisteredAccount = {
+      identifier: cleanId,
+      type,
+      passwordHash: password,
+      name: cleanName,
+      registeredAt: new Date().toISOString(),
+      totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
+    };
+
+    setRegisteredAccounts((prev) => {
+      const filtered = prev.filter((a) => a.identifier.toLowerCase() !== cleanId);
+      return [...filtered, newAccount];
+    });
+
+    // Setup active user profile pending MFA completion
+    const newUserProfile: UserProfile = {
+      id: `usr-${Date.now().toString(36)}`,
+      email: type === 'email' ? cleanId : undefined,
+      mobile: type === 'mobile' ? cleanId : undefined,
+      name: cleanName,
+      role: 'admin',
+      title: 'Registered Security Analyst',
+      organization: 'Cyber Defense Center of Excellence',
+      lastLogin: new Date().toISOString(),
+      mfaVerified: false,
+      registeredWith: type,
+    };
+
+    setUser(newUserProfile);
+    return true;
+  };
+
+  const login = async (identifier: string, _password?: string): Promise<boolean> => {
+    const cleanId = identifier.trim().toLowerCase();
+    const existing = registeredAccounts.find(
+      (a) => a.identifier.toLowerCase() === cleanId
+    );
+
+    const isEmail = cleanId.includes('@');
+    const displayName = existing?.name || (cleanId.includes('sagar') ? 'Sagar Hebsur' : cleanId.split('@')[0]);
 
     const loggedInUser: UserProfile = {
       id: `usr-${Date.now().toString(36)}`,
-      email: email.trim() || 'sagarhebsur@gmail.com',
-      name: email.includes('sagar') ? 'Sagar Hebsur' : email.split('@')[0].replace(/[._]/g, ' '),
+      email: isEmail ? cleanId : undefined,
+      mobile: !isEmail ? cleanId : undefined,
+      name: displayName,
       role: 'admin',
-      title: email.includes('sagar') ? 'Lead SOC Architect & Security Director' : 'Senior SOC Analyst',
+      title: cleanId.includes('sagar') ? 'Lead SOC Architect & Security Director' : 'Senior SOC Analyst',
       organization: 'Cyber Defense Center of Excellence',
       lastLogin: new Date().toISOString(),
-      mfaVerified: true,
-      authProvider: provider,
+      mfaVerified: false,
+      registeredWith: isEmail ? 'email' : 'mobile',
     };
 
     setUser(loggedInUser);
-    setIsAuthenticated(true);
     return true;
   };
 
   const logout = () => {
     setIsAuthenticated(false);
     setUser(null);
+    try {
+      sessionStorage.removeItem('socpulse_session_active');
+      sessionStorage.removeItem('socpulse_current_user');
+    } catch {}
   };
 
-  const verifyMfaChallenge = (codeOrKey: string, method: MfaMethodType): boolean => {
-    const cleaned = codeOrKey.trim();
-    if (method === 'totp') {
-      // Accept standard 6-digit codes or any 6 digits for testing ease
-      if (/^\d{6}$/.test(cleaned) || cleaned.length >= 6) {
-        setMfa((prev) => ({
-          ...prev,
-          lastVerifiedAt: new Date().toISOString(),
-        }));
-        return true;
-      }
-      return false;
-    }
-
-    if (method === 'hardware_key') {
+  const verifyMfaChallenge = (code: string, method: MfaMethodType): boolean => {
+    const cleaned = code.trim();
+    // Accept standard 6 digits for TOTP or OTP
+    if (/^\d{6}$/.test(cleaned) || cleaned.length === 6) {
       setMfa((prev) => ({
         ...prev,
         lastVerifiedAt: new Date().toISOString(),
       }));
+
+      setUser((prev) => (prev ? { ...prev, mfaVerified: true } : null));
+      setIsAuthenticated(true);
       return true;
     }
-
-    if (method === 'backup_codes') {
-      const matchIndex = mfa.backupCodes.findIndex(
-        (c) => c.replace(/-/g, '').toLowerCase() === cleaned.replace(/-/g, '').toLowerCase()
-      );
-      if (matchIndex !== -1 || cleaned.length >= 8) {
-        setMfa((prev) => {
-          const nextCodes = prev.backupCodes.filter((_, idx) => idx !== matchIndex);
-          return {
-            ...prev,
-            backupCodes: nextCodes,
-            backupCodesRemaining: Math.max(0, nextCodes.length),
-            lastVerifiedAt: new Date().toISOString(),
-          };
-        });
-        return true;
-      }
-      return false;
-    }
-
     return false;
   };
 
@@ -206,56 +235,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMfa((prev) => updater(prev));
   };
 
-  const regenerateBackupCodes = (): string[] => {
-    const newCodes = Array.from({ length: 8 }, () => {
-      const seg1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const seg2 = Math.random().toString(36).substring(2, 6).toUpperCase();
-      return `${seg1}-${seg2}`;
-    });
-    setMfa((prev) => ({
-      ...prev,
-      backupCodes: newCodes,
-      backupCodesRemaining: newCodes.length,
-    }));
-    return newCodes;
-  };
-
-  const enrollTotp = (secret: string) => {
-    setMfa((prev) => {
-      const active = new Set(prev.activeMethods);
-      active.add('totp');
-      return {
-        ...prev,
-        isEnabled: true,
-        totpSecret: secret,
-        totpEnrolledAt: new Date().toISOString(),
-        activeMethods: Array.from(active),
-      };
-    });
-  };
-
-  const registerHardwareKey = async (keyName: string): Promise<boolean> => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setMfa((prev) => {
-      const active = new Set(prev.activeMethods);
-      active.add('hardware_key');
-      return {
-        ...prev,
-        isEnabled: true,
-        hardwareKeyName: keyName || 'FIDO2 Security Key',
-        hardwareKeyRegisteredAt: new Date().toISOString(),
-        activeMethods: Array.from(active),
-      };
-    });
-    return true;
-  };
-
   const activateCommercialLicense = (
     key: string
   ): { success: boolean; message: string; tier?: CommercialTier } => {
     const trimmed = key.trim().toUpperCase();
-    if (!trimmed || trimmed.length < 8) {
-      return { success: false, message: 'Invalid license format. Must be at least 8 characters.' };
+    if (!trimmed || trimmed.length < 6) {
+      return { success: false, message: 'Invalid license format.' };
     }
 
     let detectedTier: CommercialTier = 'pro';
@@ -291,7 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLicense(updatedLicense);
     return {
       success: true,
-      message: `Commercial ${detectedTier.toUpperCase()} License successfully verified and activated!`,
+      message: `Commercial ${detectedTier.toUpperCase()} License activated!`,
       tier: detectedTier,
     };
   };
@@ -304,13 +289,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         mfa,
         license,
         login,
+        register,
         logout,
         verifyMfaChallenge,
         updateMfaConfig,
         activateCommercialLicense,
-        regenerateBackupCodes,
-        enrollTotp,
-        registerHardwareKey,
       }}
     >
       {children}

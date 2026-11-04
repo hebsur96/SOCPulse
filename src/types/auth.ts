@@ -1,4 +1,4 @@
-export type MfaMethodType = 'totp' | 'hardware_key' | 'backup_codes';
+export type MfaMethodType = 'totp' | 'otp';
 
 export interface MfaConfig {
   isEnabled: boolean;
@@ -6,12 +6,8 @@ export interface MfaConfig {
   activeMethods: MfaMethodType[];
   totpSecret: string;
   totpEnrolledAt?: string;
-  hardwareKeyName?: string;
-  hardwareKeyRegisteredAt?: string;
-  backupCodes: string[];
-  backupCodesRemaining: number;
+  otpCode?: string;
   lastVerifiedAt?: string;
-  enforceForAdminActions: boolean;
   sessionTimeoutMinutes: number;
 }
 
@@ -42,7 +38,8 @@ export interface CommercialLicense {
 
 export interface UserProfile {
   id: string;
-  email: string;
+  email?: string;
+  mobile?: string;
   name: string;
   role: 'admin' | 'visitor';
   title: string;
@@ -50,7 +47,16 @@ export interface UserProfile {
   avatarUrl?: string;
   lastLogin: string;
   mfaVerified: boolean;
-  authProvider: 'password' | 'okta' | 'azure_ad' | 'google_workspace';
+  registeredWith: 'email' | 'mobile';
+}
+
+export interface RegisteredAccount {
+  identifier: string; // email or mobile
+  type: 'email' | 'mobile';
+  passwordHash: string;
+  name: string;
+  registeredAt: string;
+  totpSecret: string;
 }
 
 export interface AuthState {
@@ -58,12 +64,10 @@ export interface AuthState {
   user: UserProfile | null;
   mfa: MfaConfig;
   license: CommercialLicense;
-  login: (email: string, password?: string, provider?: UserProfile['authProvider']) => Promise<boolean>;
+  login: (identifier: string, password?: string) => Promise<boolean>;
+  register: (identifier: string, password: string, name?: string, type?: 'email' | 'mobile') => Promise<boolean>;
   logout: () => void;
-  verifyMfaChallenge: (codeOrKey: string, method: MfaMethodType) => boolean;
+  verifyMfaChallenge: (code: string, method: MfaMethodType) => boolean;
   updateMfaConfig: (updater: (prev: MfaConfig) => MfaConfig) => void;
   activateCommercialLicense: (key: string) => { success: boolean; message: string; tier?: CommercialTier };
-  regenerateBackupCodes: () => string[];
-  enrollTotp: (secret: string) => void;
-  registerHardwareKey: (keyName: string) => Promise<boolean>;
 }

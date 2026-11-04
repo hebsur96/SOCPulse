@@ -25,18 +25,15 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ShieldCheck, Lock, X, CheckCircle2 } from 'lucide-react';
 
 function AppInner() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
 
   const [currentView, setCurrentView] = useState<ViewMode>('copilot');
   const [deviceFrame, setDeviceFrame] = useState<DeviceFrameMode>('desktop');
   const [selectedPlatform, setSelectedPlatform] = useState<SiemPlatformId>('sentinel');
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  const [isVisitorExploring, setIsVisitorExploring] = useState(false);
-
   // Commercial & MFA modal states
   const [showMfaModal, setShowMfaModal] = useState<boolean>(false);
   const [showCommercialModal, setShowCommercialModal] = useState<boolean>(false);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   // User role state
   const [userRole, setUserRole] = useState<UserRole>(() => {
@@ -97,20 +94,9 @@ function AppInner() {
 
   const isLight = theme === 'light';
 
-  // If user is logged out and not exploring as a visitor, show dedicated LoginPage
-  if (!isAuthenticated && !isVisitorExploring) {
-    return (
-      <LoginPage
-        onSuccessLogin={() => {
-          setIsVisitorExploring(false);
-          setShowLoginModal(false);
-        }}
-        onContinueAsVisitor={() => {
-          setIsVisitorExploring(true);
-          setUserRole('visitor');
-        }}
-      />
-    );
+  // Whenever the users access this app, first login page should appear
+  if (!isAuthenticated) {
+    return <LoginPage />;
   }
 
   return (
@@ -150,10 +136,7 @@ function AppInner() {
             onUserRoleChange={handleRoleChange}
             onOpenMfaModal={() => setShowMfaModal(true)}
             onOpenCommercialModal={() => setShowCommercialModal(true)}
-            onOpenLogin={() => {
-              setIsVisitorExploring(false);
-              setShowLoginModal(true);
-            }}
+            onOpenLogin={logout}
           />
 
           {/* Main Content Area with Vertical Sidebar */}
@@ -378,26 +361,7 @@ function AppInner() {
             }}
           />
 
-          {/* Login Page as overlay if explicitly triggered */}
-          {showLoginModal && (
-            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-              <div className="relative w-full max-w-lg">
-                <button
-                  onClick={() => setShowLoginModal(false)}
-                  className="absolute -top-10 right-0 p-2 text-slate-400 hover:text-white"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-                <LoginPage
-                  onSuccessLogin={() => setShowLoginModal(false)}
-                  onContinueAsVisitor={() => {
-                    setShowLoginModal(false);
-                    setUserRole('visitor');
-                  }}
-                />
-              </div>
-            </div>
-          )}
+
 
           {/* Permission Matrix Dialog */}
           {showPermissionModal && (
