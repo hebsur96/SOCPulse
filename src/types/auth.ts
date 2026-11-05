@@ -57,6 +57,7 @@ export interface RegisteredAccount {
   name: string;
   registeredAt: string;
   totpSecret: string;
+  mfaMethod?: MfaMethodType;
 }
 
 export interface AuthState {
@@ -66,8 +67,15 @@ export interface AuthState {
   mfa: MfaConfig;
   license: CommercialLicense;
   login: (identifier: string, password?: string) => Promise<boolean>;
-  register: (identifier: string, password: string, name?: string, type?: 'email' | 'mobile') => Promise<boolean>;
+  register: (
+    identifier: string,
+    password: string,
+    name?: string,
+    type?: 'email' | 'mobile',
+    preferredMfa?: MfaMethodType
+  ) => Promise<boolean>;
   logout: () => void;
+  generateOtpCode: (identifier?: string) => string;
   verifyMfaChallenge: (code: string, method: MfaMethodType) => boolean;
   updateMfaConfig: (updater: (prev: MfaConfig) => MfaConfig) => void;
   activateCommercialLicense: (key: string) => { success: boolean; message: string; tier?: CommercialTier };

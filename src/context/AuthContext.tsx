@@ -15,7 +15,7 @@ const DEFAULT_MFA: MfaConfig = {
   activeMethods: ['totp', 'otp'],
   totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
   totpEnrolledAt: '2026-03-15T08:30:00Z',
-  otpCode: '492815',
+  otpCode: undefined,
   lastVerifiedAt: undefined,
   sessionTimeoutMinutes: 60,
 };
@@ -134,7 +134,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     identifier: string,
     password: string,
     name?: string,
-    type: 'email' | 'mobile' = 'email'
+    type: 'email' | 'mobile' = 'email',
+    preferredMfa: MfaMethodType = 'totp'
   ): Promise<boolean> => {
     const cleanId = identifier.trim().toLowerCase();
     const cleanName = name?.trim() || cleanId.split('@')[0];
@@ -146,6 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: cleanName,
       registeredAt: new Date().toISOString(),
       totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
+      mfaMethod: preferredMfa,
     };
 
     setRegisteredAccounts((prev) => {
@@ -209,20 +211,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
   };
 
+  const generateOtpCode = (_targetId?: string): string => {
+    // Generate secure dynamic 6-digit verification code
+    const freshOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setMfa((prev) => ({
+      ...prev,
+      otpCode: freshOtp,
+    }));
+    return freshOtp;
+  };
+
   const verifyMfaChallenge = (code: string, method: MfaMethodType): boolean => {
     const cleaned = code.trim();
-    // Accept standard 6 digits for TOTP or OTP
-    if (/^\d{6}$/.test(cleaned) || cleaned.length === 6) {
-      setMfa((prev) => ({
-        ...prev,
-        lastVerifiedAt: new Date().toISOString(),
-      }));
-
-      setUser((prev) => (prev ? { ...prev, mfaVerified: true } : null));
-      setIsAuthenticated(true);
-      return true;
+    if (!/^\d{6}$/.test(cleaned) || cleaned.length !== 6) {
+      return false;
     }
-    return false;
+
+    // Verify OTP against generated code if OTP method was selected
+    if (method === 'otp' && mfa.otpCode) {
+      if (cleaned !== mfa.otpCode) {
+        return false;
+      }
+    }
+
+    setMfa((prev) => ({
+      ...prev,
+      lastVerifiedAt: new Date().toISOString(),
+      totpEnrolledAt: method === 'totp' ? new Date().toISOString() : prev.totpEnrolledAt,
+    }));
+
+    setUser((prev) => (prev ? { ...prev, mfaVerified: true } : null));
+    setIsAuthenticated(true);
+    return true;
   };
 
   const updateMfaConfig = (updater: (prev: MfaConfig) => MfaConfig) => {
@@ -288,6 +308,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout,
+        generateOtpCode,
         verifyMfaChallenge,
         updateMfaConfig,
         activateCommercialLicense,

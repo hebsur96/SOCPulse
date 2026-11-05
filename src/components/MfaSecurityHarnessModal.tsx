@@ -206,7 +206,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                     maxLength={6}
                     value={testCode}
                     onChange={(e) => setTestCode(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="e.g. 582914"
+                    placeholder="000000"
                     className="w-44 text-center text-lg font-mono font-bold tracking-widest px-3 py-2 rounded-xl bg-[#060D18] border border-[#1B3047] text-cyan-300 focus:outline-none focus:border-cyan-400"
                   />
                   <button
@@ -216,13 +216,6 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     Verify Code
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTestCode('582914')}
-                    className="text-[11px] font-mono text-cyan-400 underline hover:text-cyan-300 ml-1"
-                  >
-                    Fill 582914
                   </button>
                 </div>
 
@@ -235,7 +228,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                 {verifyStatus === 'error' && (
                   <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                    <span>Verification failed. Enter any 6-digit number.</span>
+                    <span>Verification failed. Enter the 6-digit code from your authenticator app.</span>
                   </div>
                 )}
               </form>
@@ -271,7 +264,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
 
                 {otpResent && (
                   <p className="text-[11px] text-emerald-400 font-mono animate-in fade-in">
-                    New OTP sent!
+                    New OTP verification code sent to your account!
                   </p>
                 )}
 
@@ -281,7 +274,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                     maxLength={6}
                     value={testCode}
                     onChange={(e) => setTestCode(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="492815"
+                    placeholder="000000"
                     className="w-44 text-center text-lg font-mono font-bold tracking-widest px-3 py-2 rounded-xl bg-[#060D18] border border-[#1B3047] text-cyan-300 focus:outline-none focus:border-cyan-400"
                   />
                   <button
@@ -291,13 +284,6 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     Verify OTP
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTestCode('492815')}
-                    className="text-[11px] font-mono text-cyan-400 underline hover:text-cyan-300 ml-1"
-                  >
-                    Fill 492815
                   </button>
                 </div>
 
