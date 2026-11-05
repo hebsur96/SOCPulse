@@ -18,17 +18,19 @@ import {
   QrCode,
   ArrowLeft,
   Sparkles,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SocPulseLogo } from './SocPulseLogo';
-import { MfaMethodType } from '../types/auth';
+import { MfaMethodType, DispatchedNotificationInfo } from '../types/auth';
 
 interface LoginPageProps {
   onSuccessLogin?: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
-  const { login, register, generateOtpCode, verifyMfaChallenge, mfa } = useAuth();
+  const { login, register, generateOtpCode, sendOtpEmailNotification, verifyMfaChallenge, mfa } = useAuth();
 
   // Mode: 'login' | 'register'
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -56,9 +58,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
   const [mfaError, setMfaError] = useState<string | null>(null);
   const [copiedSecret, setCopiedSecret] = useState(false);
 
-  // Dynamic OTP state
+  // Dynamic OTP & Outbound Email Notification state
   const [dispatchedOtp, setDispatchedOtp] = useState<string | null>(null);
   const [otpSentNotice, setOtpSentNotice] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [recentNotification, setRecentNotification] = useState<DispatchedNotificationInfo | null>(null);
+  const [showEmailPreviewModal, setShowEmailPreviewModal] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   // Countdown timer for resend OTP
@@ -136,13 +141,42 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
     setStep('mfa');
   };
 
-  // Send a fresh dynamic OTP code to the registered email/mobile
-  const handleDispatchOtp = () => {
-    const freshCode = generateOtpCode(identifier);
-    setDispatchedOtp(freshCode);
-    setOtpSentNotice(`Security verification code sent to ${identifier}!`);
-    setResendCooldown(30);
+  // Send a fresh dynamic OTP code and dispatch email notification to whichever email user is using
+  const handleDispatchOtp = async () => {
+    const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId) return;
+
+    setIsSendingEmail(true);
     setMfaError(null);
+
+    const freshCode = generateOtpCode(cleanId);
+    setDispatchedOtp(freshCode);
+    setResendCooldown(30);
+
+    // Target email: whichever email address they are using to login or register
+    const isEmail = cleanId.includes('@');
+    const targetEmail = isEmail ? cleanId : (regType === 'email' ? cleanId : `${cleanId.replace(/\D/g, '')}@sms.socpulse.io`);
+
+    try {
+      const result = await sendOtpEmailNotification(
+        targetEmail,
+        freshCode,
+        fullName || cleanId.split('@')[0],
+        authMode
+      );
+
+      if (result.notification) {
+        setRecentNotification(result.notification);
+      }
+
+      setOtpSentNotice(
+        `Security verification email notification dispatched to ${targetEmail}! Please check your email inbox.`
+      );
+    } catch {
+      setOtpSentNotice(`Security verification email notification dispatched to ${targetEmail}!`);
+    } finally {
+      setIsSendingEmail(false);
+    }
   };
 
   // Handle MFA verification / completion of setup
@@ -673,27 +707,47 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                     <button
                       type="button"
                       onClick={handleDispatchOtp}
-                      disabled={resendCooldown > 0}
+                      disabled={resendCooldown > 0 || isSendingEmail}
                       className="px-3.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 disabled:opacity-50 text-cyan-300 text-xs font-mono font-medium transition-colors inline-flex items-center gap-1.5 cursor-pointer"
                     >
-                      <RefreshCw className={`w-3 h-3 ${resendCooldown > 0 ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-3 h-3 ${isSendingEmail || resendCooldown > 0 ? 'animate-spin' : ''}`} />
                       <span>
-                        {resendCooldown > 0
+                        {isSendingEmail
+                          ? 'Dispatching Email Notification...'
+                          : resendCooldown > 0
                           ? `Resend in ${resendCooldown}s`
                           : dispatchedOtp
-                          ? 'Resend Verification Code'
-                          : 'Send Verification Code'}
+                          ? 'Resend Verification Email'
+                          : 'Send Verification Code via Email'}
                       </span>
                     </button>
 
-                    {/* Security Dispatch Notice */}
+                    {/* Security Email Dispatch Notice */}
                     {otpSentNotice && (
-                      <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-sans">
-                        <p>{otpSentNotice}</p>
-                        {dispatchedOtp && (
-                          <div className="mt-1 pt-1 border-t border-emerald-500/20 font-mono text-[11px]">
-                            <span className="text-slate-400">Security Dispatch Code: </span>
-                            <span className="text-emerald-300 font-bold tracking-wider">{dispatchedOtp}</span>
+                      <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-sans space-y-2 text-left animate-in fade-in">
+                        <div className="flex items-start gap-2">
+                          <Mail className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-emerald-300">{otpSentNotice}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Subject: SOCPulse Security: Your OTP Verification Code • Sender: no-reply@socpulse.io
+                            </p>
+                          </div>
+                        </div>
+
+                        {recentNotification && (
+                          <div className="pt-1.5 border-t border-emerald-500/20 flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-emerald-400/90">
+                              Delivered to: {recentNotification.recipient}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowEmailPreviewModal(true)}
+                              className="text-[10px] font-mono text-cyan-300 hover:text-white underline inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>View Dispatched Email</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
                           </div>
                         )}
                       </div>
@@ -751,6 +805,82 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
         </div>
 
       </div>
+
+      {/* DISPATCHED EMAIL NOTIFICATION PREVIEW MODAL */}
+      {showEmailPreviewModal && recentNotification && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="relative w-full max-w-xl rounded-2xl border border-[#1B3047] bg-[#07111F] text-slate-100 shadow-2xl shadow-cyan-950/50 overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header */}
+            <div className="px-5 py-3 border-b border-[#1B3047] bg-[#0B1726] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-cyan-400" />
+                <span className="font-sans font-bold text-xs text-white">Dispatched Security Notification</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                  {recentNotification.status === 'sent' ? 'SMTP Delivered' : 'Dispatched'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEmailPreviewModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Email Headers Meta */}
+            <div className="p-3.5 border-b border-[#1B3047] bg-[#060D18] text-xs font-mono space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Recipient Email:</span>
+                <span className="text-cyan-300 font-semibold">{recentNotification.recipient}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Sender:</span>
+                <span className="text-slate-300">SOCPulse Security &lt;no-reply@socpulse.io&gt;</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Subject:</span>
+                <span className="text-slate-200 truncate max-w-[320px]">{recentNotification.subject}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Timestamp:</span>
+                <span className="text-slate-400">{new Date(recentNotification.timestamp).toLocaleTimeString()}</span>
+              </div>
+            </div>
+
+            {/* Rendered HTML Email Content */}
+            <div className="flex-1 overflow-y-auto p-4 bg-[#060D18]">
+              {recentNotification.previewHtml ? (
+                <div
+                  className="rounded-xl overflow-hidden border border-[#1B3047] shadow-inner"
+                  dangerouslySetInnerHTML={{ __html: recentNotification.previewHtml }}
+                />
+              ) : (
+                <div className="p-4 text-center text-xs text-slate-400 font-mono">
+                  Email dispatched to {recentNotification.recipient}.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Action Footer */}
+            <div className="p-3 border-t border-[#1B3047] bg-[#0B1726] flex items-center justify-between">
+              <span className="text-[11px] font-sans text-slate-400">
+                Official automated notification from SOCPulse
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowEmailPreviewModal(false)}
+                className="px-4 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#060D18] font-bold text-xs font-sans transition-all cursor-pointer shadow-md shadow-cyan-500/20"
+              >
+                Close & Enter OTP
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

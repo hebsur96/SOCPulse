@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { SIEM_PLATFORMS } from './src/data/siemPlatforms.js';
 import { buildUniversalDetection, THREAT_SCENARIOS } from './src/data/detectionRulesEngine.js';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 
@@ -136,6 +137,182 @@ async function callGeminiMultiModel(
 // Healthcheck endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ==========================================
+// EMAIL NOTIFICATION DISPATCH SYSTEM (OTP)
+// ==========================================
+interface DispatchedEmailNotification {
+  id: string;
+  recipient: string;
+  recipientName: string;
+  subject: string;
+  otpCode: string;
+  purpose: 'login' | 'register';
+  timestamp: string;
+  status: 'sent' | 'simulated';
+  previewHtml: string;
+}
+
+const dispatchedEmailsLog: DispatchedEmailNotification[] = [];
+
+const getMailTransporter = () => {
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+
+  if (host && user && pass) {
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+  }
+  return null;
+};
+
+const generateOtpEmailHtml = (email: string, name: string, otp: string, type: 'login' | 'register') => {
+  const actionText = type === 'register' ? 'New Account Registration' : 'Account Sign In';
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SOCPulse Two-Factor Authentication</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #060D18; color: #f1f5f9; margin: 0; padding: 24px; }
+    .container { max-width: 560px; margin: 0 auto; background-color: #0B1726; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; }
+    .header { background: linear-gradient(135deg, #09172A 0%, #060D18 100%); padding: 24px; text-align: center; border-bottom: 1px solid #1E293B; }
+    .logo { font-size: 22px; font-weight: bold; color: #ffffff; letter-spacing: -0.5px; }
+    .logo span { color: #22d3ee; }
+    .content { padding: 32px 28px; }
+    .title { font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 8px; }
+    .desc { font-size: 14px; color: #94a3b8; line-height: 1.5; margin-bottom: 24px; }
+    .otp-box { background-color: #060D18; border: 2px dashed #0891b2; border-radius: 10px; padding: 22px; text-align: center; margin: 24px 0; }
+    .otp-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #38bdf8; font-weight: 600; margin-bottom: 8px; font-family: monospace; }
+    .otp-code { font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #22d3ee; }
+    .notice { font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px; padding-top: 16px; border-top: 1px solid #1E293B; }
+    .footer { background-color: #060D18; padding: 16px; text-align: center; font-size: 11px; color: #475569; border-top: 1px solid #1E293B; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">SOC<span>Pulse</span></div>
+      <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; font-family: monospace;">Enterprise Cyber Defense Center</div>
+    </div>
+    <div class="content">
+      <div class="title">Security Verification Code</div>
+      <p class="desc">Hello <strong>${name || 'Security Analyst'}</strong>,<br><br>We received a request for <strong>${actionText}</strong> using your email address (<code>${email}</code>). Please use the One-Time Passcode below to complete your Multi-Factor Authentication.</p>
+      
+      <div class="otp-box">
+        <div class="otp-label">One-Time Passcode (OTP)</div>
+        <div class="otp-code">${otp}</div>
+      </div>
+      
+      <p style="font-size: 12px; color: #cbd5e1; text-align: center;">This code will expire in <strong>10 minutes</strong>. Do not share this code with anyone.</p>
+      
+      <div class="notice">
+        <strong>Security Advisory:</strong> If you did not initiate this request, your credentials may be compromised. Please notify your SOC Security Administrator immediately.
+      </div>
+    </div>
+    <div class="footer">
+      SOCPulse Enterprise Defense System • FIPS 140-2 Level 3 Aligned MFA<br>
+      Automated Security Dispatch • Do not reply directly to this email
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+// POST /api/auth/send-otp-email: Dispatches OTP notification via SMTP if configured, and saves to security dispatch log
+app.post('/api/auth/send-otp-email', async (req, res) => {
+  try {
+    const { email, otp, name, type = 'login' } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP code are required.' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+    const cleanName = String(name || cleanEmail.split('@')[0]);
+    const cleanType: 'login' | 'register' = type === 'register' ? 'register' : 'login';
+
+    const subject = `SOCPulse Security: Your OTP Verification Code is ${cleanOtp}`;
+    const html = generateOtpEmailHtml(cleanEmail, cleanName, cleanOtp, cleanType);
+
+    const transporter = getMailTransporter();
+    let sentViaSmtp = false;
+    let messageId = `socp-msg-${Date.now()}`;
+
+    if (transporter) {
+      try {
+        const fromAddress = process.env.SMTP_FROM || 'SOCPulse Security <no-reply@socpulse.io>';
+        const info = await transporter.sendMail({
+          from: fromAddress,
+          to: cleanEmail,
+          subject,
+          text: `Your SOCPulse verification code for ${cleanType === 'register' ? 'account registration' : 'sign in'} is: ${cleanOtp}. This code expires in 10 minutes.`,
+          html,
+        });
+        sentViaSmtp = true;
+        messageId = info.messageId || messageId;
+        console.log(`[SMTP] Dispatched OTP email to ${cleanEmail}: ${messageId}`);
+      } catch (smtpErr) {
+        console.warn(`[SMTP Warning] Outbound SMTP connection error, saving to in-app dispatch center:`, smtpErr);
+      }
+    }
+
+    // Save notification to recent log
+    const notificationItem: DispatchedEmailNotification = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      recipient: cleanEmail,
+      recipientName: cleanName,
+      subject,
+      otpCode: cleanOtp,
+      purpose: cleanType,
+      timestamp: new Date().toISOString(),
+      status: sentViaSmtp ? 'sent' : 'simulated',
+      previewHtml: html,
+    };
+
+    dispatchedEmailsLog.unshift(notificationItem);
+    if (dispatchedEmailsLog.length > 50) {
+      dispatchedEmailsLog.pop();
+    }
+
+    return res.json({
+      success: true,
+      message: sentViaSmtp
+        ? `Security verification email dispatched to ${cleanEmail}`
+        : `Security notification generated for ${cleanEmail}`,
+      deliveredVia: sentViaSmtp ? 'smtp' : 'in-app-dispatch',
+      notification: {
+        id: notificationItem.id,
+        recipient: notificationItem.recipient,
+        recipientName: notificationItem.recipientName,
+        subject: notificationItem.subject,
+        purpose: notificationItem.purpose,
+        timestamp: notificationItem.timestamp,
+        status: notificationItem.status,
+        previewHtml: notificationItem.previewHtml,
+      },
+    });
+  } catch (err: any) {
+    console.error('Error in /api/auth/send-otp-email:', err);
+    return res.status(500).json({ error: 'Failed to dispatch email notification.' });
+  }
+});
+
+// GET /api/auth/recent-notifications: Retrieve recent notifications for email preview drawer
+app.get('/api/auth/recent-notifications', (req, res) => {
+  const emailQuery = req.query.email ? String(req.query.email).trim().toLowerCase() : null;
+  if (!emailQuery) {
+    return res.json({ notifications: dispatchedEmailsLog.slice(0, 5) });
+  }
+  const filtered = dispatchedEmailsLog.filter((n) => n.recipient === emailQuery);
+  return res.json({ notifications: filtered.slice(0, 10) });
 });
 
 // 1. Generate SOC Detection Query & 10-Point Analysis Endpoint

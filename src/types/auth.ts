@@ -60,6 +60,17 @@ export interface RegisteredAccount {
   mfaMethod?: MfaMethodType;
 }
 
+export interface DispatchedNotificationInfo {
+  id: string;
+  recipient: string;
+  recipientName: string;
+  subject: string;
+  purpose: 'login' | 'register';
+  timestamp: string;
+  status: 'sent' | 'simulated';
+  previewHtml?: string;
+}
+
 export interface AuthState {
   isAuthenticated: boolean;
   isOwnerAdmin: boolean;
@@ -76,6 +87,12 @@ export interface AuthState {
   ) => Promise<boolean>;
   logout: () => void;
   generateOtpCode: (identifier?: string) => string;
+  sendOtpEmailNotification: (
+    email: string,
+    otp: string,
+    name?: string,
+    type?: 'login' | 'register'
+  ) => Promise<{ success: boolean; message?: string; notification?: DispatchedNotificationInfo }>;
   verifyMfaChallenge: (code: string, method: MfaMethodType) => boolean;
   updateMfaConfig: (updater: (prev: MfaConfig) => MfaConfig) => void;
   activateCommercialLicense: (key: string) => { success: boolean; message: string; tier?: CommercialTier };

@@ -23,7 +23,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
   isOpen,
   onClose,
 }) => {
-  const { mfa, user, verifyMfaChallenge } = useAuth();
+  const { mfa, user, verifyMfaChallenge, generateOtpCode, sendOtpEmailNotification } = useAuth();
 
   const [activeTab, setActiveTab] = useState<MfaMethodType>('totp');
   const [copiedKey, setCopiedKey] = useState(false);
@@ -66,9 +66,12 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
     }
   };
 
-  const handleResendOtp = () => {
+  const handleResendOtp = async () => {
+    const code = generateOtpCode();
+    const targetEmail = user?.email || (user?.mobile ? `${user.mobile.replace(/\D/g, '')}@sms.socpulse.io` : 'analyst@socpulse.io');
+    await sendOtpEmailNotification(targetEmail, code, user?.name, 'login');
     setOtpResent(true);
-    setTimeout(() => setOtpResent(false), 3000);
+    setTimeout(() => setOtpResent(false), 4000);
   };
 
   return (
