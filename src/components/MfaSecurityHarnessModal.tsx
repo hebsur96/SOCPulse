@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { MfaMethodType } from '../types/auth';
+import { generateTotpQrCodeDataUrl, formatSecretForDisplay, sanitizeBase32Secret } from '../utils/totp';
 
 interface MfaSecurityHarnessModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
   const [verifyStatus, setVerifyStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [totpCountdown, setTotpCountdown] = useState(30);
   const [otpResent, setOtpResent] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -41,10 +43,21 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (isOpen && activeTab === 'totp') {
+      const targetUser = user?.email || user?.mobile || 'analyst@socpulse.io';
+      const cleanSecret = sanitizeBase32Secret(mfa.totpSecret);
+      generateTotpQrCodeDataUrl(targetUser, cleanSecret)
+        .then((url) => setQrDataUrl(url))
+        .catch((err) => console.error('Failed to generate TOTP QR in modal:', err));
+    }
+  }, [isOpen, activeTab, user, mfa.totpSecret]);
+
   if (!isOpen) return null;
 
   const handleCopySecret = () => {
-    navigator.clipboard.writeText(mfa.totpSecret);
+    const cleanSecret = sanitizeBase32Secret(mfa.totpSecret);
+    navigator.clipboard.writeText(cleanSecret);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
@@ -147,26 +160,19 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
           {activeTab === 'totp' && (
             <div className="space-y-4">
               <div className="p-4 rounded-xl border border-[#1B3047] bg-[#060D18] flex flex-col sm:flex-row items-center gap-4">
-                {/* SVG QR Code */}
+                {/* Genuine Scannable QR Code */}
                 <div className="p-2.5 bg-white rounded-xl shadow-md shrink-0">
-                  <svg viewBox="0 0 100 100" className="w-24 h-24" fill="none">
-                    <rect width="100" height="100" fill="white" />
-                    <rect x="8" y="8" width="28" height="28" fill="#060D18" rx="2" />
-                    <rect x="12" y="12" width="20" height="20" fill="white" />
-                    <rect x="16" y="16" width="12" height="12" fill="#0891b2" />
-                    <rect x="64" y="8" width="28" height="28" fill="#060D18" rx="2" />
-                    <rect x="68" y="12" width="20" height="20" fill="white" />
-                    <rect x="72" y="16" width="12" height="12" fill="#0891b2" />
-                    <rect x="8" y="64" width="28" height="28" fill="#060D18" rx="2" />
-                    <rect x="12" y="68" width="20" height="20" fill="white" />
-                    <rect x="16" y="72" width="12" height="12" fill="#0891b2" />
-                    <rect x="42" y="12" width="16" height="8" fill="#060D18" />
-                    <rect x="42" y="32" width="24" height="8" fill="#0891b2" />
-                    <rect x="42" y="52" width="16" height="16" fill="#060D18" />
-                    <rect x="64" y="52" width="24" height="8" fill="#0891b2" />
-                    <rect x="42" y="80" width="20" height="12" fill="#060D18" />
-                    <rect x="72" y="76" width="16" height="16" fill="#060D18" />
-                  </svg>
+                  {qrDataUrl ? (
+                    <img
+                      src={qrDataUrl}
+                      alt="Authenticator App QR Code"
+                      className="w-24 h-24 rounded"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 bg-slate-100 flex items-center justify-center animate-pulse rounded">
+                      <Smartphone className="w-8 h-8 text-slate-700" />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 text-left w-full">
@@ -177,13 +183,13 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
                     Or enter this manual secret key into your app:
                   </p>
                   <div className="flex items-center gap-1.5">
-                    <code className="flex-1 p-2 rounded-lg bg-[#0B1726] border border-[#1B3047] font-mono text-xs text-cyan-300 font-bold select-all">
-                      {mfa.totpSecret}
+                    <code className="flex-1 p-2 rounded-lg bg-[#0B1726] border border-[#1B3047] font-mono text-xs text-cyan-300 font-bold select-all tracking-wider">
+                      {formatSecretForDisplay(mfa.totpSecret)}
                     </code>
                     <button
                       onClick={handleCopySecret}
                       className="p-2 rounded-lg bg-[#101F32] hover:bg-[#182C44] text-slate-200 border border-[#1B3047] transition-colors"
-                      title="Copy Key"
+                      title="Copy Base32 Key"
                     >
                       {copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                     </button>

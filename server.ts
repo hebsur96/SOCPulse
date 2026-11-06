@@ -264,6 +264,32 @@ app.post('/api/auth/send-otp-email', async (req, res) => {
       }
     }
 
+    // Support optional Resend API key for direct outbound delivery without full SMTP
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!sentViaSmtp && resendApiKey) {
+      try {
+        const resendRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: process.env.SMTP_FROM || 'SOCPulse <onboarding@resend.dev>',
+            to: cleanEmail,
+            subject,
+            html,
+          }),
+        });
+        if (resendRes.ok) {
+          sentViaSmtp = true;
+          console.log(`[Resend API] Dispatched real outbound email to ${cleanEmail}`);
+        }
+      } catch (resendErr) {
+        console.warn('[Resend API Error]:', resendErr);
+      }
+    }
+
     // Save notification to recent log
     const notificationItem: DispatchedEmailNotification = {
       id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -288,11 +314,13 @@ app.post('/api/auth/send-otp-email', async (req, res) => {
         ? `Security verification email dispatched to ${cleanEmail}`
         : `Security notification generated for ${cleanEmail}`,
       deliveredVia: sentViaSmtp ? 'smtp' : 'in-app-dispatch',
+      isLiveDelivered: sentViaSmtp,
       notification: {
         id: notificationItem.id,
         recipient: notificationItem.recipient,
         recipientName: notificationItem.recipientName,
         subject: notificationItem.subject,
+        otpCode: notificationItem.otpCode,
         purpose: notificationItem.purpose,
         timestamp: notificationItem.timestamp,
         status: notificationItem.status,

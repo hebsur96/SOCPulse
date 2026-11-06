@@ -10,11 +10,13 @@ import {
   DispatchedNotificationInfo,
 } from '../types/auth';
 
+import { DEFAULT_BASE32_SECRET, isValidBase32Secret } from '../utils/totp';
+
 const DEFAULT_MFA: MfaConfig = {
   isEnabled: true,
   isEnforced: true,
   activeMethods: ['totp', 'otp'],
-  totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
+  totpSecret: DEFAULT_BASE32_SECRET,
   totpEnrolledAt: '2026-03-15T08:30:00Z',
   otpCode: undefined,
   lastVerifiedAt: undefined,
@@ -84,7 +86,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [mfa, setMfa] = useState<MfaConfig>(() => {
     try {
       const stored = localStorage.getItem('socpulse_mfa_config');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (!parsed.totpSecret || !isValidBase32Secret(parsed.totpSecret) || parsed.totpSecret === 'SOCP-ULSE-SEC7-MFA9-2026') {
+          parsed.totpSecret = DEFAULT_BASE32_SECRET;
+        }
+        return parsed;
+      }
     } catch {}
     return DEFAULT_MFA;
   });
@@ -147,7 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       passwordHash: password,
       name: cleanName,
       registeredAt: new Date().toISOString(),
-      totpSecret: 'SOCP-ULSE-SEC7-MFA9-2026',
+      totpSecret: DEFAULT_BASE32_SECRET,
       mfaMethod: preferredMfa,
     };
 

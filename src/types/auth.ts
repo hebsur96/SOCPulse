@@ -65,6 +65,7 @@ export interface DispatchedNotificationInfo {
   recipient: string;
   recipientName: string;
   subject: string;
+  otpCode?: string;
   purpose: 'login' | 'register';
   timestamp: string;
   status: 'sent' | 'simulated';
