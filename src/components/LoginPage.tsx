@@ -12,18 +12,13 @@ import {
   Copy,
   Check,
   Smartphone,
-  KeyRound,
   AlertCircle,
-  RefreshCw,
   QrCode,
   ArrowLeft,
   Sparkles,
-  X,
-  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SocPulseLogo } from './SocPulseLogo';
-import { MfaMethodType, DispatchedNotificationInfo } from '../types/auth';
 import { generateTotpQrCodeDataUrl, formatSecretForDisplay, sanitizeBase32Secret } from '../utils/totp';
 
 interface LoginPageProps {
@@ -31,7 +26,7 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
-  const { login, register, generateOtpCode, sendOtpEmailNotification, verifyMfaChallenge, mfa } = useAuth();
+  const { login, register, verifyMfaChallenge, mfa } = useAuth();
 
   // Mode: 'login' | 'register'
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -53,40 +48,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
-  // MFA Setup & Verification State
-  const [mfaMethod, setMfaMethod] = useState<MfaMethodType>('totp');
+  // MFA Verification State (Authenticator App TOTP strictly)
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState<string | null>(null);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
-  // Dynamic OTP & Outbound Email Notification state
-  const [dispatchedOtp, setDispatchedOtp] = useState<string | null>(null);
-  const [otpSentNotice, setOtpSentNotice] = useState<string | null>(null);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-  const [recentNotification, setRecentNotification] = useState<DispatchedNotificationInfo | null>(null);
-  const [showEmailPreviewModal, setShowEmailPreviewModal] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
-
-  // Generate genuine machine-scannable QR code whenever in MFA TOTP mode
+  // Generate genuine machine-scannable QR code whenever in MFA TOTP step
   useEffect(() => {
-    if (step === 'mfa' && mfaMethod === 'totp') {
+    if (step === 'mfa') {
       const targetUser = identifier.trim() || 'analyst@socpulse.io';
       const cleanSecret = sanitizeBase32Secret(mfa.totpSecret);
       generateTotpQrCodeDataUrl(targetUser, cleanSecret)
         .then((url) => setQrDataUrl(url))
         .catch((err) => console.error('Failed to generate TOTP QR code:', err));
     }
-  }, [step, mfaMethod, identifier, mfa.totpSecret]);
-
-  // Countdown timer for resend OTP
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const interval = setInterval(() => {
-      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [resendCooldown]);
+  }, [step, identifier, mfa.totpSecret]);
 
   // Handle Login submission -> triggers MFA verification step
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -107,8 +84,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
     await login(cleanId, password);
     setMfaCode('');
     setMfaError(null);
-    setDispatchedOtp(null);
-    setOtpSentNotice(null);
     setSuccessNotice(null);
     setStep('mfa');
   };
@@ -144,65 +119,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
       return;
     }
 
-    // Register account and advance to MFA Setup
-    await register(cleanId, password, fullName || cleanId.split('@')[0], regType, mfaMethod);
+    // Register account and advance directly to Authenticator App setup
+    await register(cleanId, password, fullName || cleanId.split('@')[0], regType, 'totp');
     setMfaCode('');
     setMfaError(null);
-    setDispatchedOtp(null);
-    setOtpSentNotice(null);
-    setSuccessNotice(`Account profile created for ${cleanId}! Please configure your MFA setup below to complete registration.`);
+    setSuccessNotice(`Account profile created for ${cleanId}! Please scan the QR code below in your Authenticator app to complete setup.`);
     setStep('mfa');
-  };
-
-  // Send a fresh dynamic OTP code and dispatch email notification to whichever email user is using
-  const handleDispatchOtp = async () => {
-    const cleanId = identifier.trim().toLowerCase();
-    if (!cleanId) return;
-
-    setIsSendingEmail(true);
-    setMfaError(null);
-
-    const freshCode = generateOtpCode(cleanId);
-    setDispatchedOtp(freshCode);
-    setResendCooldown(30);
-
-    // Target email: whichever email address they are using to login or register
-    const isEmail = cleanId.includes('@');
-    const targetEmail = isEmail ? cleanId : (regType === 'email' ? cleanId : `${cleanId.replace(/\D/g, '')}@sms.socpulse.io`);
-
-    try {
-      const result = await sendOtpEmailNotification(
-        targetEmail,
-        freshCode,
-        fullName || cleanId.split('@')[0],
-        authMode
-      );
-
-      if (result.notification) {
-        setRecentNotification({
-          ...result.notification,
-          otpCode: freshCode,
-        });
-      }
-
-      setOtpSentNotice(
-        `Security verification notification email dispatched to ${targetEmail}!`
-      );
-    } catch {
-      setOtpSentNotice(`Security verification email notification dispatched to ${targetEmail}!`);
-    } finally {
-      setIsSendingEmail(false);
-    }
-  };
-
-  // One-click apply OTP from the email notification modal directly into the verification input
-  const handleApplyOtpFromEmail = (code: string) => {
-    setMfaCode(code);
-    setShowEmailPreviewModal(false);
-    const success = verifyMfaChallenge(code, 'otp');
-    if (success && onSuccessLogin) {
-      onSuccessLogin();
-    }
   };
 
   // Handle MFA verification / completion of setup
@@ -212,15 +134,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
 
     const cleanCode = mfaCode.trim();
     if (cleanCode.length !== 6 || !/^\d{6}$/.test(cleanCode)) {
-      setMfaError('Please enter the 6-digit verification code.');
+      setMfaError('Please enter the 6-digit verification code from your authenticator app.');
       return;
     }
 
-    const success = verifyMfaChallenge(cleanCode, mfaMethod);
+    const success = verifyMfaChallenge(cleanCode, 'totp');
     if (success) {
       if (onSuccessLogin) onSuccessLogin();
     } else {
-      setMfaError('Invalid verification code. Please check and try again.');
+      setMfaError('Invalid verification code. Please check your authenticator app and try again.');
     }
   };
 
@@ -260,22 +182,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
 
         {/* Card Container */}
         <div className="rounded-2xl border border-[#1B3047] bg-[#07111F]/95 backdrop-blur-xl p-6 sm:p-7 shadow-2xl shadow-cyan-950/60">
-          
-          {/* STEP 1: CREDENTIALS (LOGIN / REGISTER) */}
+
+          {/* STEP 1: CREDENTIALS (LOGIN OR REGISTER) */}
           {step === 'credentials' && (
-            <div className="space-y-5">
+            <div className="space-y-5 animate-in fade-in">
               
-              {/* Tab Switcher: Sign In vs Register */}
+              {/* Tab Selector: Login vs Register */}
               <div className="flex p-1 rounded-xl bg-[#060D18] border border-[#1B3047]">
                 <button
                   type="button"
                   onClick={() => {
                     setAuthMode('login');
                     setErrorMsg(null);
+                    setSuccessNotice(null);
                   }}
                   className={`flex-1 py-2 text-xs font-sans font-semibold rounded-lg transition-all ${
                     authMode === 'login'
-                      ? 'bg-[#101F32] text-cyan-300 shadow-xs'
+                      ? 'bg-[#101F32] text-cyan-300 shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -286,10 +209,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                   onClick={() => {
                     setAuthMode('register');
                     setErrorMsg(null);
+                    setSuccessNotice(null);
                   }}
                   className={`flex-1 py-2 text-xs font-sans font-semibold rounded-lg transition-all ${
                     authMode === 'register'
-                      ? 'bg-[#101F32] text-cyan-300 shadow-xs'
+                      ? 'bg-[#101F32] text-cyan-300 shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -297,38 +221,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                 </button>
               </div>
 
-              {/* Progress Indicator for Registration */}
+              {/* In registration mode, select Email vs Mobile */}
               {authMode === 'register' && (
-                <div className="flex items-center justify-between px-1 text-xs">
-                  <div className="flex items-center gap-1.5 text-cyan-300 font-mono font-medium">
-                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-[10px] font-bold">1</span>
-                    <span>Account Details</span>
-                  </div>
-                  <div className="w-8 h-[1px] bg-slate-700" />
-                  <div className="flex items-center gap-1.5 text-slate-500 font-mono">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px]">2</span>
-                    <span>MFA Setup</span>
-                  </div>
-                </div>
-              )}
-
-              {/* REGISTER SUB-OPTIONS: Email vs Mobile Number */}
-              {authMode === 'register' && (
-                <div className="space-y-2">
-                  <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">
-                    Register With:
+                <div className="space-y-1">
+                  <label className="text-[11px] font-mono text-slate-400 block">
+                    Registration Method:
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex p-1 rounded-xl bg-[#060D18] border border-[#1B3047] gap-1">
                     <button
                       type="button"
-                      onClick={() => {
-                        setRegType('email');
-                        setIdentifier('');
-                      }}
-                      className={`p-2 rounded-lg border text-xs font-sans font-semibold flex items-center justify-center gap-2 transition-colors ${
+                      onClick={() => setRegType('email')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-sans font-medium flex items-center justify-center gap-1.5 transition-colors ${
                         regType === 'email'
-                          ? 'border-cyan-400 bg-cyan-500/10 text-cyan-300'
-                          : 'border-[#1B3047] bg-[#060D18] text-slate-400 hover:text-white'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                          : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       <Mail className="w-3.5 h-3.5" />
@@ -336,14 +242,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setRegType('mobile');
-                        setIdentifier('');
-                      }}
-                      className={`p-2 rounded-lg border text-xs font-sans font-semibold flex items-center justify-center gap-2 transition-colors ${
+                      onClick={() => setRegType('mobile')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-sans font-medium flex items-center justify-center gap-1.5 transition-colors ${
                         regType === 'mobile'
-                          ? 'border-cyan-400 bg-cyan-500/10 text-cyan-300'
-                          : 'border-[#1B3047] bg-[#060D18] text-slate-400 hover:text-white'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                          : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       <Phone className="w-3.5 h-3.5" />
@@ -504,7 +407,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
             </div>
           )}
 
-          {/* STEP 2: MFA SETUP (DURING REGISTRATION) OR MFA VERIFICATION (DURING LOGIN) */}
+          {/* STEP 2: MFA SETUP / VERIFICATION VIA AUTHENTICATOR APP (TOTP) */}
           {step === 'mfa' && (
             <div className="space-y-4 animate-in fade-in">
               
@@ -514,10 +417,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                   <ShieldCheck className="w-5 h-5 text-cyan-400" />
                   <div>
                     <h2 className="font-sans font-bold text-sm text-white">
-                      {authMode === 'register' ? 'Set Up MFA Security' : 'MFA Verification'}
+                      {authMode === 'register' ? 'Set Up Authenticator App' : 'Authenticator Verification'}
                     </h2>
                     <p className="text-[11px] font-sans text-slate-400">
-                      {authMode === 'register' ? 'Step 2 of 2: Configure Authenticator or OTP' : 'Two-Factor Authentication Required'}
+                      {authMode === 'register' ? 'Step 2 of 2: Configure Authenticator MFA' : 'Enter 6-Digit Security Code'}
                     </p>
                   </div>
                 </div>
@@ -527,7 +430,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                     setStep('credentials');
                     setMfaError(null);
                   }}
-                  className="text-[11px] font-mono text-slate-400 hover:text-cyan-300 flex items-center gap-1"
+                  className="text-[11px] font-mono text-slate-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="w-3 h-3" />
                   <span>Back</span>
@@ -538,12 +441,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
               {successNotice && authMode === 'register' && (
                 <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs flex items-start gap-2">
                   <Sparkles className="w-4 h-4 shrink-0 text-cyan-400 mt-0.5" />
-                  <div>
-                    <span className="font-semibold block font-sans">Account Created Successfully!</span>
-                    <span className="text-[11px] text-slate-300 font-sans">
-                      Complete MFA setup below to activate two-factor protection and launch your session.
-                    </span>
-                  </div>
+                  <span>{successNotice}</span>
                 </div>
               )}
 
@@ -557,262 +455,100 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                     {identifier}
                   </span>
                 </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 font-semibold">
-                  {authMode === 'register' ? 'Setup Mode' : 'Secured'}
-                </span>
-              </div>
-
-              {/* Choice of MFA Setup Method: Authenticator App vs OTP */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-mono text-slate-400 block">
-                  {authMode === 'register' ? 'Choose MFA Setup Method:' : 'Select Verification Method:'}
-                </label>
-                <div className="flex p-1 rounded-xl bg-[#060D18] border border-[#1B3047] gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMfaMethod('totp');
-                      setMfaError(null);
-                      setMfaCode('');
-                    }}
-                    className={`flex-1 py-2 rounded-lg text-xs font-sans font-semibold flex items-center justify-center gap-1.5 transition-colors ${
-                      mfaMethod === 'totp'
-                        ? 'bg-[#101F32] text-cyan-300 shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Authenticator App</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMfaMethod('otp');
-                      setMfaError(null);
-                      setMfaCode('');
-                    }}
-                    className={`flex-1 py-2 rounded-lg text-xs font-sans font-semibold flex items-center justify-center gap-1.5 transition-colors ${
-                      mfaMethod === 'otp'
-                        ? 'bg-[#101F32] text-cyan-300 shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    <span>OTP Code</span>
-                  </button>
+                <div className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 font-semibold">
+                  <Smartphone className="w-3 h-3" />
+                  <span>Authenticator App</span>
                 </div>
               </div>
 
-              {/* METHOD 1: AUTHENTICATOR APP (TOTP) SETUP / VERIFICATION */}
-              {mfaMethod === 'totp' && (
-                <div className="space-y-3.5">
-                  <div className="p-3 rounded-xl border border-[#1B3047] bg-[#060D18] space-y-2.5">
-                    <div className="flex items-center gap-3">
-                      {/* Genuine Scannable QR Code Matrix */}
-                      <div className="p-1.5 bg-white rounded-lg shrink-0 shadow-md">
-                        {qrDataUrl ? (
-                          <img
-                            src={qrDataUrl}
-                            alt="Scan in Authenticator App"
-                            className="w-20 h-20 rounded"
-                          />
-                        ) : (
-                          <div className="w-20 h-20 bg-slate-100 flex items-center justify-center animate-pulse rounded">
-                            <QrCode className="w-8 h-8 text-slate-700" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1 text-left">
-                        <p className="text-[11px] font-sans text-slate-300 font-medium">
-                          {authMode === 'register'
-                            ? '1. Scan in Google Authenticator or Microsoft Authenticator'
-                            : 'Scan with Google Authenticator or Microsoft Authenticator:'}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-sans mt-0.5">
-                          Or enter this setup key manually:
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <code className="text-[11px] font-mono text-cyan-300 truncate font-bold tracking-wide">
-                            {formatSecretForDisplay(mfa.totpSecret)}
-                          </code>
-                          <button
-                            type="button"
-                            onClick={handleCopySecret}
-                            className="p-1.5 rounded bg-[#101F32] hover:bg-[#182C44] text-slate-200 shrink-0 transition-colors"
-                            title="Copy Base32 Secret Key"
-                          >
-                            {copiedSecret ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+              {/* AUTHENTICATOR APP (TOTP) SETUP / VERIFICATION */}
+              <div className="space-y-3.5">
+                <div className="p-3.5 rounded-xl border border-[#1B3047] bg-[#060D18] space-y-2.5">
+                  <div className="flex items-center gap-3">
+                    {/* Genuine Scannable QR Code Matrix */}
+                    <div className="p-1.5 bg-white rounded-lg shrink-0 shadow-md">
+                      {qrDataUrl ? (
+                        <img
+                          src={qrDataUrl}
+                          alt="Scan in Authenticator App"
+                          className="w-20 h-20 rounded"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 bg-slate-100 flex items-center justify-center animate-pulse rounded">
+                          <QrCode className="w-8 h-8 text-slate-700" />
                         </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="text-[11px] font-sans text-slate-300 font-medium">
+                        {authMode === 'register'
+                          ? '1. Scan in Google Authenticator or Microsoft Authenticator:'
+                          : 'Scan in Google Authenticator or Microsoft Authenticator:'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-sans mt-0.5">
+                        Or enter this setup key manually:
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <code className="text-[11px] font-mono text-cyan-300 truncate font-bold tracking-wide">
+                          {formatSecretForDisplay(mfa.totpSecret)}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={handleCopySecret}
+                          className="p-1.5 rounded bg-[#101F32] hover:bg-[#182C44] text-slate-200 shrink-0 transition-colors cursor-pointer"
+                          title="Copy Base32 Secret Key"
+                        >
+                          {copiedSecret ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                       </div>
                     </div>
                   </div>
-
-                  {/* 6-digit confirmation code input */}
-                  <form onSubmit={handleMfaSubmit} className="space-y-3">
-                    <div className="text-center">
-                      <label className="block text-xs font-mono text-slate-300 mb-1.5">
-                        {authMode === 'register'
-                          ? '2. Enter 6-digit code shown in your app:'
-                          : 'Enter 6-digit verification code:'}
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        autoFocus
-                        value={mfaCode}
-                        onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="000000"
-                        className="w-48 mx-auto text-center text-2xl font-mono font-bold tracking-widest px-3 py-2 rounded-xl bg-[#060D18] border border-cyan-500/50 text-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      />
-                    </div>
-
-                    {mfaError && (
-                      <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                        <span>{mfaError}</span>
-                      </div>
-                    )}
-
-                    <button
-                      type="submit"
-                      disabled={mfaCode.length < 6}
-                      className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-[#060D18] font-bold text-xs font-sans transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>
-                        {authMode === 'register'
-                          ? 'Confirm Authenticator Setup & Login'
-                          : 'Verify & Sign In'}
-                      </span>
-                    </button>
-                  </form>
                 </div>
-              )}
 
-              {/* METHOD 2: ONE-TIME PASSCODE (OTP) SETUP / VERIFICATION */}
-              {mfaMethod === 'otp' && (
-                <div className="space-y-3.5">
-                  <div className="p-3.5 rounded-xl border border-[#1B3047] bg-[#060D18] text-center space-y-2.5">
-                    <div>
-                      <p className="text-xs text-slate-300 font-sans">
-                        {authMode === 'register'
-                          ? 'Send OTP security code to:'
-                          : 'Send verification code to:'}
-                      </p>
-                      <p className="text-xs font-mono font-bold text-cyan-300 truncate mt-0.5">
-                        {identifier}
-                      </p>
-                    </div>
-
-                    {/* Dispatch button */}
-                    <button
-                      type="button"
-                      onClick={handleDispatchOtp}
-                      disabled={resendCooldown > 0 || isSendingEmail}
-                      className="px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 disabled:opacity-50 text-cyan-300 text-xs font-mono font-medium transition-colors inline-flex items-center gap-2 cursor-pointer shadow-sm"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isSendingEmail || resendCooldown > 0 ? 'animate-spin' : ''}`} />
-                      <span>
-                        {isSendingEmail
-                          ? 'Dispatching Verification Email...'
-                          : resendCooldown > 0
-                          ? `Resend in ${resendCooldown}s`
-                          : dispatchedOtp
-                          ? 'Resend Verification Code'
-                          : 'Send Verification Code via Email'}
-                      </span>
-                    </button>
-
-                    {/* Security Email Dispatch Notice */}
-                    {otpSentNotice && (
-                      <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-emerald-300 text-[11px] font-sans space-y-2.5 text-left animate-in fade-in">
-                        <div className="flex items-start gap-2.5">
-                          <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 shrink-0 mt-0.5">
-                            <Mail className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-emerald-300">{otpSentNotice}</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              Check your inbox at <span className="text-cyan-300 font-mono">{identifier}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        {dispatchedOtp && (
-                          <div className="pt-2 border-t border-cyan-500/20 space-y-2">
-                            <div className="flex flex-col sm:flex-row gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleApplyOtpFromEmail(dispatchedOtp)}
-                                className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#060D18] font-bold text-xs font-sans flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                                <span>Auto-Fill Dispatched OTP & Verify</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowEmailPreviewModal(true)}
-                                className="py-2 px-3 rounded-xl bg-[#101F32] hover:bg-[#182C44] border border-[#1B3047] text-cyan-300 font-mono text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                              >
-                                <Mail className="w-3.5 h-3.5" />
-                                <span>View Dispatched Email</span>
-                                <ExternalLink className="w-3 h-3" />
-                              </button>
-                            </div>
-                            <p className="text-[10px] text-slate-400 text-center font-sans">
-                              You can auto-fill the dispatched code or type it manually below.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                {/* 6-digit confirmation code input */}
+                <form onSubmit={handleMfaSubmit} className="space-y-3">
+                  <div className="text-center">
+                    <label className="block text-xs font-mono text-slate-300 mb-1.5">
+                      {authMode === 'register'
+                        ? '2. Enter 6-digit code shown in your app:'
+                        : 'Enter 6-digit verification code:'}
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      autoFocus
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="000000"
+                      className="w-48 mx-auto text-center text-2xl font-mono font-bold tracking-widest px-3 py-2 rounded-xl bg-[#060D18] border border-cyan-500/50 text-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    />
                   </div>
 
-                  {/* 6-digit OTP code input */}
-                  <form onSubmit={handleMfaSubmit} className="space-y-3">
-                    <div className="text-center">
-                      <label className="block text-xs font-mono text-slate-300 mb-1.5">
-                        Enter 6-digit OTP Code:
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        autoFocus
-                        value={mfaCode}
-                        onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="000000"
-                        className="w-48 mx-auto text-center text-2xl font-mono font-bold tracking-widest px-3 py-2 rounded-xl bg-[#060D18] border border-cyan-500/50 text-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      />
+                  {mfaError && (
+                    <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                      <span>{mfaError}</span>
                     </div>
+                  )}
 
-                    {mfaError && (
-                      <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                        <span>{mfaError}</span>
-                      </div>
-                    )}
-
-                    <button
-                      type="submit"
-                      disabled={mfaCode.length < 6}
-                      className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-[#060D18] font-bold text-xs font-sans transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>
-                        {authMode === 'register'
-                          ? 'Verify OTP & Complete Setup'
-                          : 'Verify OTP & Sign In'}
-                      </span>
-                    </button>
-                  </form>
-                </div>
-              )}
+                  <button
+                    type="submit"
+                    disabled={mfaCode.length < 6}
+                    className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-[#060D18] font-bold text-xs font-sans transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {authMode === 'register'
+                        ? 'Confirm Authenticator Setup & Login'
+                        : 'Verify & Sign In'}
+                    </span>
+                  </button>
+                </form>
+              </div>
 
             </div>
           )}
@@ -825,110 +561,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
         </div>
 
       </div>
-
-      {/* DISPATCHED EMAIL NOTIFICATION PREVIEW MODAL */}
-      {showEmailPreviewModal && recentNotification && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="relative w-full max-w-xl rounded-2xl border border-[#1B3047] bg-[#07111F] text-slate-100 shadow-2xl shadow-cyan-950/50 overflow-hidden flex flex-col max-h-[85vh]">
-            
-            {/* Modal Header */}
-            <div className="px-5 py-3 border-b border-[#1B3047] bg-[#0B1726] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-cyan-400" />
-                <span className="font-sans font-bold text-xs text-white">Dispatched Security Notification</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                  {recentNotification.status === 'sent' ? 'SMTP Delivered' : 'Dispatched'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowEmailPreviewModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Email Headers Meta */}
-            <div className="p-3.5 border-b border-[#1B3047] bg-[#060D18] text-xs font-mono space-y-1.5">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Recipient Email:</span>
-                <span className="text-cyan-300 font-semibold">{recentNotification.recipient}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Sender:</span>
-                <span className="text-slate-300">SOCPulse Security &lt;no-reply@socpulse.io&gt;</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Subject:</span>
-                <span className="text-slate-200 truncate max-w-[320px]">{recentNotification.subject}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Timestamp:</span>
-                <span className="text-slate-400">{new Date(recentNotification.timestamp).toLocaleTimeString()}</span>
-              </div>
-            </div>
-
-            {/* Rendered HTML Email Content */}
-            <div className="flex-1 overflow-y-auto p-4 bg-[#060D18]">
-              {recentNotification.previewHtml ? (
-                <div
-                  className="rounded-xl overflow-hidden border border-[#1B3047] shadow-inner"
-                  dangerouslySetInnerHTML={{ __html: recentNotification.previewHtml }}
-                />
-              ) : (
-                <div className="p-4 text-center text-xs text-slate-400 font-mono">
-                  Email dispatched to {recentNotification.recipient}.
-                </div>
-              )}
-            </div>
-
-            {/* Environment Delivery Note */}
-            <div className="px-4 py-2 bg-[#060D18] border-t border-[#1B3047] text-[10px] text-slate-400 font-sans flex items-center justify-between">
-              <span>
-                💡 Cloud Preview Delivery: Security notification dispatched to <strong className="text-cyan-300 font-mono">{recentNotification.recipient}</strong>.
-              </span>
-              <span className="text-slate-500 font-mono">
-                {recentNotification.status === 'sent' ? 'Live SMTP Sent' : 'In-App Secure Dispatch'}
-              </span>
-            </div>
-
-            {/* Modal Action Footer */}
-            <div className="p-3.5 border-t border-[#1B3047] bg-[#0B1726] flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-[11px] font-sans text-slate-300 text-left">
-                {recentNotification.otpCode && (
-                  <span className="flex items-center gap-1.5 font-mono">
-                    <span className="text-slate-400">Security Code:</span>
-                    <strong className="text-cyan-300 text-sm tracking-wider font-bold px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/40">
-                      {recentNotification.otpCode}
-                    </strong>
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                {recentNotification.otpCode && (
-                  <button
-                    type="button"
-                    onClick={() => handleApplyOtpFromEmail(recentNotification.otpCode!)}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#060D18] font-bold text-xs font-sans transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-500/25 cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Auto-Fill OTP & Verify Login</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowEmailPreviewModal(false)}
-                  className="px-3.5 py-2 rounded-xl border border-[#1B3047] hover:bg-[#101F32] text-slate-300 text-xs font-sans transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );

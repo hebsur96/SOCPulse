@@ -15,7 +15,7 @@ import { DEFAULT_BASE32_SECRET, isValidBase32Secret } from '../utils/totp';
 const DEFAULT_MFA: MfaConfig = {
   isEnabled: true,
   isEnforced: true,
-  activeMethods: ['totp', 'otp'],
+  activeMethods: ['totp'],
   totpSecret: DEFAULT_BASE32_SECRET,
   totpEnrolledAt: '2026-03-15T08:30:00Z',
   otpCode: undefined,
