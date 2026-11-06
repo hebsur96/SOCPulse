@@ -10,7 +10,12 @@ import {
   DispatchedNotificationInfo,
 } from '../types/auth';
 
-import { DEFAULT_BASE32_SECRET, isValidBase32Secret } from '../utils/totp';
+import {
+  DEFAULT_BASE32_SECRET,
+  isValidBase32Secret,
+  generateDeterministicBase32Secret,
+  verifyTotpCode,
+} from '../utils/totp';
 
 const DEFAULT_MFA: MfaConfig = {
   isEnabled: true,
@@ -148,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<boolean> => {
     const cleanId = identifier.trim().toLowerCase();
     const cleanName = name?.trim() || cleanId.split('@')[0];
+    const userSecret = generateDeterministicBase32Secret(cleanId);
 
     const newAccount: RegisteredAccount = {
       identifier: cleanId,
@@ -155,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       passwordHash: password,
       name: cleanName,
       registeredAt: new Date().toISOString(),
-      totpSecret: DEFAULT_BASE32_SECRET,
+      totpSecret: userSecret,
       mfaMethod: preferredMfa,
     };
 
@@ -163,6 +169,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const filtered = prev.filter((a) => a.identifier.toLowerCase() !== cleanId);
       return [...filtered, newAccount];
     });
+
+    setMfa((prev) => ({
+      ...prev,
+      totpSecret: userSecret,
+    }));
 
     const isOwner = cleanId === 'sagarhebsur@gmail.com';
 
@@ -189,6 +200,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existing = registeredAccounts.find(
       (a) => a.identifier.toLowerCase() === cleanId
     );
+    const userSecret = existing?.totpSecret || generateDeterministicBase32Secret(cleanId);
+
+    setMfa((prev) => ({
+      ...prev,
+      totpSecret: userSecret,
+    }));
 
     const isEmail = cleanId.includes('@');
     const isOwner = cleanId === 'sagarhebsur@gmail.com';
@@ -269,25 +286,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const verifyMfaChallenge = (code: string, method: MfaMethodType): boolean => {
+  const verifyMfaChallenge = async (
+    code: string,
+    method: MfaMethodType = 'totp',
+    targetIdentifier?: string
+  ): Promise<boolean> => {
     const cleaned = code.trim();
     if (!/^\d{6}$/.test(cleaned) || cleaned.length !== 6) {
       return false;
     }
 
-    // In client environment where dispatch code is hidden from the UI,
-    // accept the 6-digit code entered by the user
-    if (method === 'otp' && mfa.otpCode) {
-      // If user typed the exact generated code, or any 6-digit code, allow verification
-      if (!/^\d{6}$/.test(cleaned)) {
-        return false;
-      }
+    const cleanId = (targetIdentifier || user?.email || user?.mobile || '').trim().toLowerCase();
+    const existing = registeredAccounts.find((a) => a.identifier.toLowerCase() === cleanId);
+    const userSecret = existing?.totpSecret || (cleanId ? generateDeterministicBase32Secret(cleanId) : mfa.totpSecret);
+
+    const isValid = await verifyTotpCode(cleaned, userSecret);
+    if (!isValid) {
+      return false;
     }
 
     setMfa((prev) => ({
       ...prev,
+      totpSecret: userSecret,
       lastVerifiedAt: new Date().toISOString(),
-      totpEnrolledAt: method === 'totp' ? new Date().toISOString() : prev.totpEnrolledAt,
+      totpEnrolledAt: new Date().toISOString(),
     }));
 
     setUser((prev) => (prev ? { ...prev, mfaVerified: true } : null));

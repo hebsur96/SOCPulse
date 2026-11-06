@@ -10,7 +10,11 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { generateTotpQrCodeDataUrl, formatSecretForDisplay, sanitizeBase32Secret } from '../utils/totp';
+import {
+  generateTotpQrCodeDataUrl,
+  formatSecretForDisplay,
+  generateDeterministicBase32Secret,
+} from '../utils/totp';
 
 interface MfaSecurityHarnessModalProps {
   isOpen: boolean;
@@ -21,13 +25,16 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
   isOpen,
   onClose,
 }) => {
-  const { mfa, user, verifyMfaChallenge } = useAuth();
+  const { user, verifyMfaChallenge } = useAuth();
 
   const [copiedKey, setCopiedKey] = useState(false);
   const [testCode, setTestCode] = useState('');
   const [verifyStatus, setVerifyStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [totpCountdown, setTotpCountdown] = useState(30);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+
+  const userIdentifier = (user?.email || user?.mobile || 'analyst@socpulse.io').trim().toLowerCase();
+  const userSecret = generateDeterministicBase32Secret(userIdentifier);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -40,28 +47,25 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
 
   useEffect(() => {
     if (isOpen) {
-      const targetUser = user?.email || user?.mobile || 'analyst@socpulse.io';
-      const cleanSecret = sanitizeBase32Secret(mfa.totpSecret);
-      generateTotpQrCodeDataUrl(targetUser, cleanSecret)
+      generateTotpQrCodeDataUrl(userIdentifier, userSecret)
         .then((url) => setQrDataUrl(url))
         .catch((err) => console.error('Failed to generate TOTP QR in modal:', err));
     }
-  }, [isOpen, user, mfa.totpSecret]);
+  }, [isOpen, userIdentifier, userSecret]);
 
   if (!isOpen) return null;
 
   const handleCopySecret = () => {
-    const cleanSecret = sanitizeBase32Secret(mfa.totpSecret);
-    navigator.clipboard.writeText(cleanSecret);
+    navigator.clipboard.writeText(userSecret);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  const handleVerify = (e?: React.FormEvent) => {
+  const handleVerify = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!testCode.trim()) return;
 
-    const valid = verifyMfaChallenge(testCode, 'totp');
+    const valid = await verifyMfaChallenge(testCode, 'totp', userIdentifier);
     if (valid) {
       setVerifyStatus('success');
       setTimeout(() => {
@@ -134,7 +138,7 @@ export const MfaSecurityHarnessModal: React.FC<MfaSecurityHarnessModalProps> = (
               </p>
               <div className="flex items-center gap-1.5">
                 <code className="flex-1 p-2 rounded-lg bg-[#0B1726] border border-[#1B3047] font-mono text-xs text-cyan-300 font-bold select-all tracking-wider">
-                  {formatSecretForDisplay(mfa.totpSecret)}
+                  {formatSecretForDisplay(userSecret)}
                 </code>
                 <button
                   onClick={handleCopySecret}

@@ -94,7 +94,11 @@ export interface AuthState {
     name?: string,
     type?: 'login' | 'register'
   ) => Promise<{ success: boolean; message?: string; notification?: DispatchedNotificationInfo }>;
-  verifyMfaChallenge: (code: string, method: MfaMethodType) => boolean;
+  verifyMfaChallenge: (
+    code: string,
+    method?: MfaMethodType,
+    targetIdentifier?: string
+  ) => Promise<boolean>;
   updateMfaConfig: (updater: (prev: MfaConfig) => MfaConfig) => void;
   activateCommercialLicense: (key: string) => { success: boolean; message: string; tier?: CommercialTier };
 }

@@ -19,14 +19,18 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SocPulseLogo } from './SocPulseLogo';
-import { generateTotpQrCodeDataUrl, formatSecretForDisplay, sanitizeBase32Secret } from '../utils/totp';
+import {
+  generateTotpQrCodeDataUrl,
+  formatSecretForDisplay,
+  generateDeterministicBase32Secret,
+} from '../utils/totp';
 
 interface LoginPageProps {
   onSuccessLogin?: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
-  const { login, register, verifyMfaChallenge, mfa } = useAuth();
+  const { login, register, verifyMfaChallenge } = useAuth();
 
   // Mode: 'login' | 'register'
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -54,23 +58,26 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
-  // Generate genuine machine-scannable QR code whenever in MFA TOTP step
+  // Compute unique secret for the active email/identifier
+  const cleanId = identifier.trim().toLowerCase();
+  const activeUserSecret = cleanId
+    ? generateDeterministicBase32Secret(cleanId)
+    : generateDeterministicBase32Secret('analyst@socpulse.io');
+
+  // Generate genuine machine-scannable QR code whenever in MFA step for this specific user
   useEffect(() => {
-    if (step === 'mfa') {
-      const targetUser = identifier.trim() || 'analyst@socpulse.io';
-      const cleanSecret = sanitizeBase32Secret(mfa.totpSecret);
-      generateTotpQrCodeDataUrl(targetUser, cleanSecret)
+    if (step === 'mfa' && cleanId) {
+      generateTotpQrCodeDataUrl(cleanId, activeUserSecret)
         .then((url) => setQrDataUrl(url))
         .catch((err) => console.error('Failed to generate TOTP QR code:', err));
     }
-  }, [step, identifier, mfa.totpSecret]);
+  }, [step, cleanId, activeUserSecret]);
 
   // Handle Login submission -> triggers MFA verification step
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    const cleanId = identifier.trim();
     if (!cleanId) {
       setErrorMsg('Please enter your email address or mobile number.');
       return;
@@ -93,7 +100,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    const cleanId = identifier.trim();
     if (!cleanId) {
       setErrorMsg(`Please provide a valid ${regType === 'email' ? 'email address' : 'mobile number'}.`);
       return;
@@ -128,7 +134,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
   };
 
   // Handle MFA verification / completion of setup
-  const handleMfaSubmit = (e?: React.FormEvent) => {
+  const handleMfaSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setMfaError(null);
 
@@ -138,17 +144,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
       return;
     }
 
-    const success = verifyMfaChallenge(cleanCode, 'totp');
+    const success = await verifyMfaChallenge(cleanCode, 'totp', cleanId);
     if (success) {
       if (onSuccessLogin) onSuccessLogin();
     } else {
-      setMfaError('Invalid verification code. Please check your authenticator app and try again.');
+      setMfaError(`Invalid verification code. Enter the 6-digit code shown in your authenticator app for ${cleanId}.`);
     }
   };
 
   const handleCopySecret = () => {
-    const cleanSecret = sanitizeBase32Secret(mfa.totpSecret);
-    navigator.clipboard.writeText(cleanSecret);
+    navigator.clipboard.writeText(activeUserSecret);
     setCopiedSecret(true);
     setTimeout(() => setCopiedSecret(false), 2000);
   };
@@ -490,7 +495,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccessLogin }) => {
                       </p>
                       <div className="flex items-center gap-1.5 mt-1">
                         <code className="text-[11px] font-mono text-cyan-300 truncate font-bold tracking-wide">
-                          {formatSecretForDisplay(mfa.totpSecret)}
+                          {formatSecretForDisplay(activeUserSecret)}
                         </code>
                         <button
                           type="button"
